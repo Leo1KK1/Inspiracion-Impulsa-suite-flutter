@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_tokens.dart';
+import '../../features/superadmin/presentation/controllers/superadmin_controller.dart';
 
 class SuperadminShell extends StatelessWidget {
   const SuperadminShell({super.key, required this.child});
@@ -19,8 +21,14 @@ class SuperadminShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final controller = context.watch<SuperadminController>();
+    final user = controller.currentUser;
     final compact = MediaQuery.sizeOf(context).width < AppBreakpoints.desktop;
-    final navigation = _SuperadminNavigation(items: items);
+    final navigation = _SuperadminNavigation(
+      items: items,
+      fullName: user?.fullName ?? 'Superadmin',
+      email: user?.email ?? '',
+    );
     if (compact) {
       return Scaffold(
         appBar: AppBar(title: const Text('Impulsa Suite · Superadmin')),
@@ -41,24 +49,31 @@ class SuperadminShell extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 22),
                   child: Row(
                     children: [
-                      const SizedBox(
-                        width: 280,
-                        child: TextField(
-                          decoration: InputDecoration(
-                            hintText: 'Buscar tenants, usuarios…',
-                            prefixIcon: Icon(Icons.search),
-                            isDense: true,
+                      const Row(
+                        children: [
+                          Icon(Icons.public_outlined, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'Contexto global · Superadmin',
+                            style: TextStyle(fontWeight: FontWeight.w600),
                           ),
-                        ),
+                        ],
                       ),
                       const Spacer(),
-                      const CircleAvatar(child: Text('AP')),
+                      CircleAvatar(child: Text(_initials(user?.fullName))),
                       const SizedBox(width: 10),
-                      const Text('Ana Pérez · Superadmin'),
+                      Text('${user?.fullName ?? 'Superadmin'} · Superadmin'),
                       const SizedBox(width: 14),
                       IconButton(
                         tooltip: 'Cerrar sesión',
-                        onPressed: () => context.go('/superadmin/login'),
+                        onPressed: controller.saving
+                            ? null
+                            : () async {
+                                await controller.logout();
+                                if (context.mounted) {
+                                  context.go('/superadmin/login');
+                                }
+                              },
                         icon: const Icon(Icons.logout),
                       ),
                     ],
@@ -72,11 +87,29 @@ class SuperadminShell extends StatelessWidget {
       ),
     );
   }
+
+  static String _initials(String? name) {
+    final parts = (name ?? '')
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .take(2)
+        .toList();
+    return parts.isEmpty
+        ? 'SA'
+        : parts.map((part) => part[0].toUpperCase()).join();
+  }
 }
 
 class _SuperadminNavigation extends StatelessWidget {
-  const _SuperadminNavigation({required this.items});
+  const _SuperadminNavigation({
+    required this.items,
+    required this.fullName,
+    required this.email,
+  });
   final List<(String, String, IconData)> items;
+  final String fullName;
+  final String email;
 
   @override
   Widget build(BuildContext context) {
@@ -125,14 +158,17 @@ class _SuperadminNavigation extends StatelessWidget {
                 ],
               ),
             ),
-            const ListTile(
-              leading: CircleAvatar(radius: 14, child: Text('AP')),
+            ListTile(
+              leading: CircleAvatar(
+                radius: 14,
+                child: Text(SuperadminShell._initials(fullName)),
+              ),
               title: Text(
-                'Ana Pérez',
+                fullName,
                 style: TextStyle(color: Colors.white, fontSize: 12),
               ),
               subtitle: Text(
-                'ana@impulsa.io',
+                email,
                 style: TextStyle(color: Color(0xFF9AA9DB), fontSize: 10),
               ),
             ),

@@ -26,6 +26,7 @@ import '../features/restaurant_floor/presentation/pages/restaurant_floor_page.da
 import '../features/restaurant_floor/presentation/pages/table_detail_page.dart';
 import '../features/session/presentation/controllers/tenant_session_controller.dart';
 import '../features/superadmin/presentation/pages/superadmin_pages.dart';
+import '../features/superadmin/presentation/controllers/superadmin_controller.dart';
 import '../features/tenant_admin/presentation/pages/branch_context_page.dart';
 import '../features/tenant_admin/presentation/pages/branches_page.dart';
 import '../features/tenant_admin/presentation/pages/multibranch_controller_page.dart';
@@ -45,10 +46,13 @@ import '../shared/pages/reference_state_page.dart';
 import '../shared/widgets/app_states.dart';
 import 'route_guards.dart';
 
-GoRouter createAppRouter(TenantSessionController session) => GoRouter(
+GoRouter createAppRouter(
+  TenantSessionController session,
+  SuperadminController superadmin,
+) => GoRouter(
   initialLocation: '/',
-  refreshListenable: session,
-  redirect: (context, state) => _redirect(session, state.uri.path),
+  refreshListenable: Listenable.merge([session, superadmin]),
+  redirect: (context, state) => _redirect(session, superadmin, state.uri.path),
   routes: [
     GoRoute(path: '/', builder: (_, _) => const HomeSelectorPage()),
     GoRoute(path: '/tenant-login', builder: (_, _) => const TenantLoginPage()),
@@ -74,10 +78,22 @@ GoRouter createAppRouter(TenantSessionController session) => GoRouter(
   ),
 );
 
-String? _redirect(TenantSessionController session, String location) {
+String? _redirect(
+  TenantSessionController session,
+  SuperadminController superadmin,
+  String location,
+) {
   if (location == '/tenant/login') return '/tenant-login';
   if (location == '/superadmin') return '/superadmin/dashboard';
   if (location == '/app') return '/app/dashboard';
+  if (location == '/superadmin/login' && superadmin.isAuthenticated) {
+    return '/superadmin/dashboard';
+  }
+  if (location.startsWith('/superadmin/') &&
+      location != '/superadmin/login' &&
+      !superadmin.isAuthenticated) {
+    return '/superadmin/login?from=${Uri.encodeComponent(location)}';
+  }
   if (location == '/tenant-login' && session.isAuthenticated) {
     return '/app/dashboard';
   }

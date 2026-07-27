@@ -12,7 +12,6 @@ import '../features/purchasing/presentation/controllers/purchasing_controller.da
 import '../features/restaurant_floor/data/repositories/restaurant_repository.dart';
 import '../features/restaurant_floor/presentation/controllers/restaurant_controller.dart';
 import '../features/session/presentation/controllers/tenant_session_controller.dart';
-import '../features/superadmin/data/repositories/superadmin_repository.dart';
 import '../features/superadmin/presentation/controllers/superadmin_controller.dart';
 import '../features/tenant_admin/data/repositories/tenant_admin_repository.dart';
 import '../features/tenant_admin/presentation/controllers/tenant_admin_controller.dart';
@@ -23,10 +22,12 @@ class AppProviders extends StatefulWidget {
   const AppProviders({
     super.key,
     required this.sessionController,
+    required this.superadminController,
     required this.child,
   });
 
   final TenantSessionController sessionController;
+  final SuperadminController superadminController;
   final Widget child;
 
   @override
@@ -41,7 +42,6 @@ class _AppProvidersState extends State<AppProviders> {
   late final FinanceController finance;
   late final RestaurantController restaurant;
   late final WaiterController waiter;
-  late final SuperadminController superadmin;
   String? _observedBranchId;
 
   @override
@@ -54,7 +54,6 @@ class _AppProvidersState extends State<AppProviders> {
     finance = FinanceController(MockFinanceRepository());
     restaurant = RestaurantController(MockRestaurantRepository());
     waiter = WaiterController(MockWaiterRepository());
-    superadmin = SuperadminController(MockSuperadminRepository());
     _observedBranchId = widget.sessionController.activeBranchId;
     widget.sessionController.addListener(_syncBranch);
   }
@@ -80,7 +79,6 @@ class _AppProvidersState extends State<AppProviders> {
     finance.dispose();
     restaurant.dispose();
     waiter.dispose();
-    superadmin.dispose();
     super.dispose();
   }
 
@@ -95,7 +93,7 @@ class _AppProvidersState extends State<AppProviders> {
       ChangeNotifierProvider.value(value: finance),
       ChangeNotifierProvider.value(value: restaurant),
       ChangeNotifierProvider.value(value: waiter),
-      ChangeNotifierProvider.value(value: superadmin),
+      ChangeNotifierProvider.value(value: widget.superadminController),
     ],
     child: widget.child,
   );

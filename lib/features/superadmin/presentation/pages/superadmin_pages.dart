@@ -1,17 +1,16 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_tokens.dart';
-import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/app_badges.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_states.dart';
 import '../../../../shared/widgets/page_header.dart';
 import '../../data/models/superadmin_models.dart';
 import '../controllers/superadmin_controller.dart';
+import '../widgets/superadmin_dialogs.dart';
 
 class SuperadminDashboardPage extends StatefulWidget {
   const SuperadminDashboardPage({super.key});
@@ -32,24 +31,53 @@ class _SuperadminDashboardPageState extends State<SuperadminDashboardPage> {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<SuperadminController>();
-    if (controller.loading) {
+    if (controller.loading && controller.tenants.isEmpty) {
       return const AppLoadingState(message: 'Cargando plataforma…');
     }
-    if (controller.errorMessage case final message?) {
+    if (controller.errorMessage case final message?
+        when controller.tenants.isEmpty) {
       return AppErrorState(message: message, onRetry: controller.load);
     }
+
     final active = controller.tenants
-        .where((tenant) => tenant.status == 'ACTIVO')
+        .where((tenant) => tenant.status == 'ACTIVE')
         .length;
-    final revenue = controller.tenants.fold<double>(
+    final branches = controller.tenants.fold<int>(
       0,
-      (sum, tenant) => sum + tenant.monthlyRevenue,
+      (total, tenant) => total + tenant.branches.length,
     );
+    final optionalModules = controller.tenants.fold<int>(
+      0,
+      (total, tenant) =>
+          total +
+          tenant.modules
+              .where(
+                (module) => module.isEnabled && module.moduleCode != 'CORE',
+              )
+              .length,
+    );
+    final statusCounts = <String, int>{};
+    for (final tenant in controller.tenants) {
+      statusCounts.update(
+        tenant.status,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
+    }
+
     return _SuperadminPageFrame(
       children: [
-        const PageHeader(
+        PageHeader(
           title: 'Resumen de plataforma',
-          subtitle: 'Actividad, crecimiento y salud de todos los tenants.',
+          subtitle:
+              'Datos actuales reportados por la API de Superadmin para ${controller.tenants.length} tenants cargados.',
+          actions: [
+            IconButton(
+              tooltip: 'Actualizar',
+              onPressed: controller.loading ? null : controller.load,
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
         ),
         const SizedBox(height: 20),
         LayoutBuilder(
@@ -62,30 +90,30 @@ class _SuperadminDashboardPageState extends State<SuperadminDashboardPage> {
             mainAxisSpacing: 12,
             children: [
               MetricCard(
-                label: 'Tenants',
-                value: '${controller.tenants.length}',
-                detail: '$active activos',
+                label: 'Tenants totales',
+                value: '${controller.tenantPage.total}',
+                detail: '${controller.tenants.length} cargados',
                 icon: Icons.business,
               ),
-              const MetricCard(
-                label: 'Usuarios activos',
-                value: '199',
-                detail: '+12 este mes',
-                icon: Icons.people,
+              MetricCard(
+                label: 'Activos',
+                value: '$active',
+                detail: 'En el resultado cargado',
+                icon: Icons.verified_outlined,
+                color: AppColors.success,
+              ),
+              MetricCard(
+                label: 'Sucursales',
+                value: '$branches',
+                detail: 'Reportadas por la API',
+                icon: Icons.store_outlined,
                 color: AppColors.tenantAccent,
               ),
               MetricCard(
-                label: 'MRR',
-                value: AppFormatters.currency(revenue),
-                detail: '+8.4% vs. mes anterior',
-                icon: Icons.trending_up,
-                color: AppColors.success,
-              ),
-              const MetricCard(
-                label: 'Disponibilidad',
-                value: '99.98%',
-                detail: 'Servicios saludables',
-                icon: Icons.cloud_done,
+                label: 'Módulos opcionales',
+                value: '$optionalModules',
+                detail: 'RETAIL y RESTAURANT activos',
+                icon: Icons.extension_outlined,
                 color: AppColors.info,
               ),
             ],
@@ -97,46 +125,30 @@ class _SuperadminDashboardPageState extends State<SuperadminDashboardPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Crecimiento de tenants',
+                'Distribución por estado',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 230,
-                child: LineChart(
-                  LineChartData(
-                    gridData: const FlGridData(show: false),
-                    titlesData: const FlTitlesData(
-                      topTitles: AxisTitles(
-                        sideTitles: SideTitles(showTitles: false),
-                      ),
-                      rightTitles: AxisTitles(
-                        sideTitles: SideTitles(showTitles: false),
-                      ),
-                    ),
-                    borderData: FlBorderData(show: false),
-                    lineBarsData: [
-                      LineChartBarData(
-                        isCurved: true,
-                        color: AppColors.primary,
-                        barWidth: 3,
-                        belowBarData: BarAreaData(
-                          show: true,
-                          color: AppColors.primary.withValues(alpha: 0.08),
+              const SizedBox(height: 14),
+              if (statusCounts.isEmpty)
+                const Text('La API no devolvió tenants.')
+              else
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (final entry in statusCounts.entries)
+                      Chip(
+                        avatar: Icon(
+                          Icons.circle,
+                          size: 12,
+                          color: _tenantStatusColor(entry.key),
                         ),
-                        spots: const [
-                          FlSpot(0, 18),
-                          FlSpot(1, 22),
-                          FlSpot(2, 28),
-                          FlSpot(3, 34),
-                          FlSpot(4, 41),
-                          FlSpot(5, 52),
-                        ],
+                        label: Text(
+                          '${_tenantStatusLabel(entry.key)} · ${entry.value}',
+                        ),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
-              ),
             ],
           ),
         ),
@@ -153,48 +165,121 @@ class SuperadminTenantsPage extends StatefulWidget {
 }
 
 class _SuperadminTenantsPageState extends State<SuperadminTenantsPage> {
+  final _searchController = TextEditingController();
+  String? _status;
+
   @override
   void initState() {
     super.initState();
     final controller = context.read<SuperadminController>();
+    _searchController.text = controller.search;
+    _status = controller.statusFilter;
     if (controller.tenants.isEmpty) controller.load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _search() => context.read<SuperadminController>().load(
+    search: _searchController.text,
+    status: _status,
+  );
+
+  Future<void> _createTenant() async {
+    final payload = await showTenantFormDialog(context);
+    if (payload == null || !mounted) return;
+    final controller = context.read<SuperadminController>();
+    final success = await controller.createTenant(payload);
+    if (!mounted) return;
+    _showOperationResult(
+      context,
+      success: success,
+      successMessage: 'Tenant creado correctamente.',
+      errorMessage: controller.errorMessage,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<SuperadminController>();
-    if (controller.loading) {
-      return const AppLoadingState(message: 'Cargando tenants…');
-    }
     return _SuperadminPageFrame(
       children: [
         PageHeader(
           title: 'Tenants',
-          subtitle: 'Gestiona las organizaciones activas en Impulsa Suite.',
+          subtitle: 'Gestiona las organizaciones registradas en el backend.',
           actions: [
             ElevatedButton.icon(
-              onPressed: () =>
-                  AppSuccessFeedback.show(context, 'Solicitud de alta creada.'),
+              onPressed: controller.saving ? null : _createTenant,
               icon: const Icon(Icons.add),
               label: const Text('Nuevo tenant'),
             ),
           ],
         ),
         const SizedBox(height: 18),
-        TextField(
-          onChanged: controller.setQuery,
-          decoration: const InputDecoration(
-            hintText: 'Buscar por nombre o identificador…',
-            prefixIcon: Icon(Icons.search),
-          ),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(
+              width: 360,
+              child: TextField(
+                controller: _searchController,
+                onSubmitted: (_) => _search(),
+                decoration: const InputDecoration(
+                  hintText: 'Nombre, slug o correo…',
+                  prefixIcon: Icon(Icons.search),
+                ),
+              ),
+            ),
+            SizedBox(
+              width: 200,
+              child: DropdownButtonFormField<String?>(
+                initialValue: _status,
+                decoration: const InputDecoration(labelText: 'Estado'),
+                items: const [
+                  DropdownMenuItem(value: null, child: Text('Todos')),
+                  DropdownMenuItem(value: 'ACTIVE', child: Text('Activo')),
+                  DropdownMenuItem(value: 'PAUSED', child: Text('Pausado')),
+                  DropdownMenuItem(
+                    value: 'SUSPENDED',
+                    child: Text('Suspendido'),
+                  ),
+                  DropdownMenuItem(value: 'BLOCKED', child: Text('Bloqueado')),
+                ],
+                onChanged: (value) => setState(() => _status = value),
+              ),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: controller.loading ? null : _search,
+              icon: const Icon(Icons.filter_alt_outlined),
+              label: const Text('Aplicar'),
+            ),
+            IconButton(
+              tooltip: 'Actualizar',
+              onPressed: controller.loading ? null : _search,
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
         ),
         const SizedBox(height: 14),
-        if (controller.filteredTenants.isEmpty)
+        if (controller.loading)
+          const LinearProgressIndicator()
+        else if (controller.errorMessage case final message?)
+          AppErrorState(message: message, onRetry: _search)
+        else if (controller.tenants.isEmpty)
           OperationalEmptyState(
             title: 'No hay tenants que coincidan',
-            message: 'Modifica la búsqueda para ver resultados.',
-            actionLabel: 'Limpiar búsqueda',
-            onAction: () => controller.setQuery(''),
+            message: 'Modifica los filtros o registra un tenant nuevo.',
+            actionLabel: 'Limpiar filtros',
+            onAction: () {
+              _searchController.clear();
+              setState(() => _status = null);
+              _search();
+            },
           )
         else
           AppCard(
@@ -204,15 +289,15 @@ class _SuperadminTenantsPageState extends State<SuperadminTenantsPage> {
               child: DataTable(
                 columns: const [
                   DataColumn(label: Text('Tenant')),
+                  DataColumn(label: Text('Correo principal')),
                   DataColumn(label: Text('Plan')),
                   DataColumn(label: Text('Estado')),
                   DataColumn(label: Text('Sucursales')),
-                  DataColumn(label: Text('Usuarios')),
-                  DataColumn(label: Text('MRR')),
+                  DataColumn(label: Text('Módulos activos')),
                   DataColumn(label: Text('')),
                 ],
                 rows: [
-                  for (final tenant in controller.filteredTenants)
+                  for (final tenant in controller.tenants)
                     DataRow(
                       cells: [
                         DataCell(
@@ -226,17 +311,15 @@ class _SuperadminTenantsPageState extends State<SuperadminTenantsPage> {
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              Text(tenant.id),
+                              Text(tenant.slug),
                             ],
                           ),
                         ),
-                        DataCell(Text(tenant.plan)),
+                        DataCell(Text(tenant.primaryEmail)),
+                        DataCell(Text(tenant.planCode)),
                         DataCell(_TenantStatus(status: tenant.status)),
-                        DataCell(Text('${tenant.branches}')),
-                        DataCell(Text('${tenant.users}')),
-                        DataCell(
-                          Text(AppFormatters.currency(tenant.monthlyRevenue)),
-                        ),
+                        DataCell(Text('${tenant.branches.length}')),
+                        DataCell(Text('${tenant.enabledModuleCount}')),
                         DataCell(
                           IconButton(
                             tooltip: 'Ver tenant',
@@ -251,137 +334,90 @@ class _SuperadminTenantsPageState extends State<SuperadminTenantsPage> {
               ),
             ),
           ),
+        if (controller.tenantPage.total > controller.tenants.length) ...[
+          const SizedBox(height: 12),
+          Text(
+            'Se muestran ${controller.tenants.length} de ${controller.tenantPage.total} tenants. La API limita esta consulta a 100 registros.',
+          ),
+        ],
       ],
     );
   }
 }
 
-class SuperadminTenantDetailPage extends StatelessWidget {
+class SuperadminTenantDetailPage extends StatefulWidget {
   const SuperadminTenantDetailPage({super.key, required this.tenantId});
 
   final String tenantId;
 
   @override
-  Widget build(BuildContext context) {
-    final controller = context.watch<SuperadminController>();
-    final tenant = controller.tenants
-        .where((candidate) => candidate.id == tenantId)
-        .firstOrNull;
-    if (controller.loading) {
-      return const AppLoadingState(message: 'Cargando tenant…');
+  State<SuperadminTenantDetailPage> createState() =>
+      _SuperadminTenantDetailPageState();
+}
+
+class _SuperadminTenantDetailPageState
+    extends State<SuperadminTenantDetailPage> {
+  @override
+  void initState() {
+    super.initState();
+    context.read<SuperadminController>().loadTenant(widget.tenantId);
+  }
+
+  @override
+  void didUpdateWidget(covariant SuperadminTenantDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tenantId != widget.tenantId) {
+      context.read<SuperadminController>().loadTenant(widget.tenantId);
     }
-    if (tenant == null) {
-      return AppErrorState(
-        message: 'No encontramos el tenant solicitado.',
-        onRetry: () => context.go('/superadmin/tenants'),
-      );
-    }
-    return _SuperadminPageFrame(
-      children: [
-        PageHeader(
-          title: tenant.name,
-          subtitle: '${tenant.id} · Plan ${tenant.plan}',
-          actions: [
-            OutlinedButton.icon(
-              onPressed: () => _confirmToggle(context, tenant),
-              icon: Icon(
-                tenant.status == 'SUSPENDIDO'
-                    ? Icons.play_arrow
-                    : Icons.pause_outlined,
-              ),
-              label: Text(
-                tenant.status == 'SUSPENDIDO'
-                    ? 'Reactivar tenant'
-                    : 'Suspender tenant',
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            SizedBox(
-              width: 250,
-              child: MetricCard(
-                label: 'Estado',
-                value: tenant.status,
-                icon: Icons.verified_user_outlined,
-                color: tenant.status == 'ACTIVO'
-                    ? AppColors.success
-                    : AppColors.warning,
-              ),
-            ),
-            SizedBox(
-              width: 250,
-              child: MetricCard(
-                label: 'Sucursales',
-                value: '${tenant.branches}',
-                icon: Icons.store_outlined,
-              ),
-            ),
-            SizedBox(
-              width: 250,
-              child: MetricCard(
-                label: 'Usuarios',
-                value: '${tenant.users}',
-                icon: Icons.people_outline,
-              ),
-            ),
-            SizedBox(
-              width: 250,
-              child: MetricCard(
-                label: 'Ingreso mensual',
-                value: AppFormatters.currency(tenant.monthlyRevenue),
-                icon: Icons.payments_outlined,
-                color: AppColors.tenantAccent,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 18),
-        AppCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Actividad reciente',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 10),
-              const ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(child: Icon(Icons.login)),
-                title: Text('Inicio de sesión administrativo'),
-                subtitle: Text('María López · hace 12 minutos'),
-              ),
-              const ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(child: Icon(Icons.store)),
-                title: Text('Sucursal CDMX Centro actualizada'),
-                subtitle: Text('Configuración operativa · ayer'),
-              ),
-            ],
-          ),
-        ),
-      ],
+  }
+
+  Future<void> _editTenant(PlatformTenant tenant) async {
+    final payload = await showTenantFormDialog(context, tenant: tenant);
+    if (payload == null || !mounted) return;
+    final controller = context.read<SuperadminController>();
+    final success = await controller.updateTenant(tenant.id, payload);
+    if (!mounted) return;
+    _showOperationResult(
+      context,
+      success: success,
+      successMessage: 'Datos del tenant actualizados.',
+      errorMessage: controller.errorMessage,
     );
   }
 
-  Future<void> _confirmToggle(
-    BuildContext context,
+  Future<void> _changeTenantStatus(PlatformTenant tenant) async {
+    final status = await showStatusDialog(
+      context,
+      title: 'Cambiar estado del tenant',
+      currentStatus: tenant.status,
+      statuses: const ['ACTIVE', 'PAUSED', 'SUSPENDED', 'BLOCKED'],
+      labelFor: _tenantStatusLabel,
+    );
+    if (status == null || !mounted) return;
+    final controller = context.read<SuperadminController>();
+    final success = await controller.changeTenantStatus(tenant.id, status);
+    if (!mounted) return;
+    _showOperationResult(
+      context,
+      success: success,
+      successMessage: 'Estado del tenant actualizado.',
+      errorMessage: controller.errorMessage,
+    );
+  }
+
+  Future<void> _toggleModule(
     PlatformTenant tenant,
+    String moduleCode,
+    bool isEnabled,
   ) async {
-    final suspend = tenant.status != 'SUSPENDIDO';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(suspend ? 'Suspender tenant' : 'Reactivar tenant'),
+        title: Text(isEnabled ? 'Activar módulo' : 'Desactivar módulo'),
         content: Text(
-          suspend
-              ? 'El acceso operativo quedará bloqueado hasta reactivar la organización.'
-              : 'La organización recuperará acceso a sus módulos.',
+          isEnabled
+              ? 'El módulo $moduleCode quedará contratado para este tenant.'
+              : 'El módulo $moduleCode dejará de estar disponible para el tenant.',
         ),
         actions: [
           TextButton(
@@ -395,11 +431,341 @@ class SuperadminTenantDetailPage extends StatelessWidget {
         ],
       ),
     );
-    if (confirmed != true || !context.mounted) return;
-    context.read<SuperadminController>().toggleTenant(tenant.id);
-    AppSuccessFeedback.show(
+    if (confirmed != true || !mounted) return;
+    final current = {
+      for (final module in tenant.modules) module.moduleCode: module.isEnabled,
+      'CORE': true,
+      moduleCode: isEnabled,
+    };
+    final modules = ['CORE', 'RETAIL', 'RESTAURANT']
+        .map(
+          (code) =>
+              TenantModule(moduleCode: code, isEnabled: current[code] ?? false),
+        )
+        .toList();
+    final controller = context.read<SuperadminController>();
+    final success = await controller.updateModules(tenant.id, modules);
+    if (!mounted) return;
+    _showOperationResult(
       context,
-      suspend ? 'Tenant suspendido.' : 'Tenant reactivado.',
+      success: success,
+      successMessage: 'Módulos actualizados.',
+      errorMessage: controller.errorMessage,
+    );
+  }
+
+  Future<void> _saveOwner(PlatformTenant tenant, {required bool create}) async {
+    final controller = context.read<SuperadminController>();
+    final payload = await showOwnerFormDialog(
+      context,
+      owner: create ? null : controller.ownersByTenant[tenant.id],
+      creating: create,
+    );
+    if (payload == null || !mounted) return;
+    final success = create
+        ? await controller.createOwner({'tenantId': tenant.id, ...payload})
+        : await controller.updateOwner(tenant.id, payload);
+    if (!mounted) return;
+    _showOperationResult(
+      context,
+      success: success,
+      successMessage: create
+          ? 'OWNER creado correctamente.'
+          : 'OWNER actualizado correctamente.',
+      errorMessage: controller.errorMessage,
+    );
+  }
+
+  Future<void> _changeOwnerStatus(
+    PlatformTenant tenant,
+    OwnerAccount? owner,
+  ) async {
+    final status = await showStatusDialog(
+      context,
+      title: 'Cambiar estado del OWNER',
+      currentStatus: owner?.status ?? 'ACTIVE',
+      statuses: const ['ACTIVE', 'INACTIVE', 'SUSPENDED'],
+      labelFor: _ownerStatusLabel,
+    );
+    if (status == null || !mounted) return;
+    final controller = context.read<SuperadminController>();
+    final success = await controller.changeOwnerStatus(tenant.id, status);
+    if (!mounted) return;
+    _showOperationResult(
+      context,
+      success: success,
+      successMessage: 'Estado del OWNER actualizado.',
+      errorMessage: controller.errorMessage,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = context.watch<SuperadminController>();
+    final tenant = controller.selectedTenant?.id == widget.tenantId
+        ? controller.selectedTenant
+        : controller.tenants
+              .where((candidate) => candidate.id == widget.tenantId)
+              .firstOrNull;
+    if (controller.loading && tenant == null) {
+      return const AppLoadingState(message: 'Cargando tenant…');
+    }
+    if (controller.errorMessage case final message? when tenant == null) {
+      return AppErrorState(
+        message: message,
+        onRetry: () => controller.loadTenant(widget.tenantId),
+      );
+    }
+    if (tenant == null) {
+      return AppErrorState(
+        message: 'No encontramos el tenant solicitado.',
+        onRetry: () => context.go('/superadmin/tenants'),
+      );
+    }
+    final owner = controller.ownersByTenant[tenant.id];
+    final modules = {
+      for (final module in tenant.modules) module.moduleCode: module.isEnabled,
+    };
+
+    return _SuperadminPageFrame(
+      children: [
+        PageHeader(
+          title: tenant.name,
+          subtitle: '${tenant.slug} · ${tenant.primaryEmail}',
+          actions: [
+            OutlinedButton.icon(
+              onPressed: controller.saving ? null : () => _editTenant(tenant),
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('Editar'),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: controller.saving
+                  ? null
+                  : () => _changeTenantStatus(tenant),
+              icon: const Icon(Icons.admin_panel_settings_outlined),
+              label: const Text('Cambiar estado'),
+            ),
+          ],
+        ),
+        if (controller.saving || controller.loading) ...[
+          const SizedBox(height: 12),
+          const LinearProgressIndicator(),
+        ],
+        const SizedBox(height: 20),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            SizedBox(
+              width: 250,
+              child: MetricCard(
+                label: 'Estado',
+                value: _tenantStatusLabel(tenant.status),
+                icon: Icons.verified_user_outlined,
+                color: _tenantStatusColor(tenant.status),
+              ),
+            ),
+            SizedBox(
+              width: 250,
+              child: MetricCard(
+                label: 'Plan',
+                value: tenant.planCode,
+                icon: Icons.workspace_premium_outlined,
+              ),
+            ),
+            SizedBox(
+              width: 250,
+              child: MetricCard(
+                label: 'Sucursales',
+                value: '${tenant.branches.length}',
+                icon: Icons.store_outlined,
+              ),
+            ),
+            SizedBox(
+              width: 250,
+              child: MetricCard(
+                label: 'Módulos activos',
+                value: '${tenant.enabledModuleCount}',
+                icon: Icons.extension_outlined,
+                color: AppColors.tenantAccent,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth >= 980
+                ? (constraints.maxWidth - 12) / 2
+                : constraints.maxWidth;
+            return Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                SizedBox(
+                  width: width,
+                  child: AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Datos corporativos',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 12),
+                        _DetailRow(label: 'ID', value: tenant.id),
+                        _DetailRow(label: 'Slug', value: tenant.slug),
+                        _DetailRow(label: 'Correo', value: tenant.primaryEmail),
+                        _DetailRow(
+                          label: 'Dirección',
+                          value: tenant.address ?? 'No registrada',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: width,
+                  child: AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Módulos contratados',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('CORE'),
+                          subtitle: const Text(
+                            'Módulo base obligatorio del tenant.',
+                          ),
+                          value: true,
+                          onChanged: null,
+                        ),
+                        for (final code in const ['RETAIL', 'RESTAURANT'])
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(code),
+                            subtitle: Text(
+                              modules[code] == true
+                                  ? 'Activo en el backend'
+                                  : 'Inactivo en el backend',
+                            ),
+                            value: modules[code] ?? false,
+                            onChanged: controller.saving
+                                ? null
+                                : (value) => _toggleModule(tenant, code, value),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Sucursales reportadas',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 10),
+              if (tenant.branches.isEmpty)
+                const Text('Este tenant no tiene sucursales registradas.')
+              else
+                for (final branch in tenant.branches)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const CircleAvatar(
+                      child: Icon(Icons.store_outlined),
+                    ),
+                    title: Text(branch.name),
+                    subtitle: Text(
+                      '${branch.code} · ${branch.address ?? 'Sin dirección'}',
+                    ),
+                    trailing: AppBadge(
+                      label: branch.status ?? 'Sin estado',
+                      color: branch.status == 'ACTIVE'
+                          ? AppColors.success
+                          : AppColors.warning,
+                    ),
+                  ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'OWNER del tenant',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: controller.saving
+                            ? null
+                            : () => _saveOwner(tenant, create: true),
+                        icon: const Icon(Icons.person_add_alt_1_outlined),
+                        label: const Text('Crear'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: controller.saving
+                            ? null
+                            : () => _saveOwner(tenant, create: false),
+                        icon: const Icon(Icons.manage_accounts_outlined),
+                        label: const Text('Actualizar'),
+                      ),
+                      FilledButton.tonalIcon(
+                        onPressed: controller.saving
+                            ? null
+                            : () => _changeOwnerStatus(tenant, owner),
+                        icon: const Icon(Icons.toggle_on_outlined),
+                        label: const Text('Estado'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (owner == null)
+                const Text(
+                  'El backend de HU01 no expone un endpoint GET para consultar al OWNER. '
+                  'Aquí solo se mostrarán datos reales devueltos después de crear, actualizar '
+                  'o cambiar su estado durante esta sesión.',
+                )
+              else
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.person_outline),
+                  ),
+                  title: Text(owner.fullName),
+                  subtitle: Text(owner.email),
+                  trailing: AppBadge(
+                    label: _ownerStatusLabel(owner.status),
+                    color: owner.status == 'ACTIVE'
+                        ? AppColors.success
+                        : AppColors.warning,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -428,7 +794,7 @@ class SuperadminModulePage extends StatelessWidget {
             const SizedBox(width: 16),
             const Expanded(
               child: Text(
-                'La referencia React contiene este módulo como estado informativo, sin operaciones ni contrato backend. La ruta se conserva para no romper navegación.',
+                'HU01 no define operaciones backend para esta ruta. Se mantiene informativa y sin datos simulados.',
               ),
             ),
           ],
@@ -444,14 +810,35 @@ class _TenantStatus extends StatelessWidget {
   final String status;
 
   @override
-  Widget build(BuildContext context) {
-    final color = switch (status) {
-      'ACTIVO' => AppColors.success,
-      'SUSPENDIDO' => AppColors.destructive,
-      _ => AppColors.warning,
-    };
-    return AppBadge(label: status, color: color);
-  }
+  Widget build(BuildContext context) => AppBadge(
+    label: _tenantStatusLabel(status),
+    color: _tenantStatusColor(status),
+  );
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 5),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 100,
+          child: Text(
+            label,
+            style: TextStyle(color: Theme.of(context).colorScheme.outline),
+          ),
+        ),
+        Expanded(child: SelectableText(value)),
+      ],
+    ),
+  );
 }
 
 class _SuperadminPageFrame extends StatelessWidget {
@@ -472,4 +859,48 @@ class _SuperadminPageFrame extends StatelessWidget {
       ),
     ),
   );
+}
+
+String _tenantStatusLabel(String status) => switch (status) {
+  'ACTIVE' => 'Activo',
+  'PAUSED' => 'Pausado',
+  'SUSPENDED' => 'Suspendido',
+  'BLOCKED' => 'Bloqueado',
+  _ => status,
+};
+
+String _ownerStatusLabel(String status) => switch (status) {
+  'ACTIVE' => 'Activo',
+  'INACTIVE' => 'Inactivo',
+  'SUSPENDED' => 'Suspendido',
+  _ => status,
+};
+
+Color _tenantStatusColor(String status) => switch (status) {
+  'ACTIVE' => AppColors.success,
+  'SUSPENDED' || 'BLOCKED' => AppColors.destructive,
+  _ => AppColors.warning,
+};
+
+void _showOperationResult(
+  BuildContext context, {
+  required bool success,
+  required String successMessage,
+  String? errorMessage,
+}) {
+  final messenger = ScaffoldMessenger.of(context);
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? successMessage
+              : errorMessage ?? 'No fue posible completar la operación.',
+        ),
+        backgroundColor: success
+            ? AppColors.success
+            : Theme.of(context).colorScheme.error,
+      ),
+    );
 }
