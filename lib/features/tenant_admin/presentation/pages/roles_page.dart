@@ -257,7 +257,9 @@ class _TenantRolesPageState extends State<TenantRolesPage> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(controller.errorMessage ?? 'No fue posible crear el rol.'),
+          content: Text(
+            controller.errorMessage ?? 'No fue posible crear el rol.',
+          ),
         ),
       );
     }

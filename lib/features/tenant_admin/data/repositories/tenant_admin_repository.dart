@@ -35,13 +35,10 @@ class HttpTenantAdminRepository implements TenantAdminRepository {
   @override
   Future<List<Branch>> getBranches() async {
     final results = await Future.wait([
+      _requestList(() => _client.dio.get<Object?>('/api/v1/tenant/branches')),
       _requestList(
-        () => _client.dio.get<Object?>('/api/v1/tenant/branches'),
-      ),
-      _requestList(
-        () => _client.dio.get<Object?>(
-          '/api/v1/tenant/branches/employee-count',
-        ),
+        () =>
+            _client.dio.get<Object?>('/api/v1/tenant/branches/employee-count'),
       ),
     ]);
     final counts = <String, int>{
@@ -66,9 +63,7 @@ class HttpTenantAdminRepository implements TenantAdminRepository {
     );
     return data
         .whereType<Map>()
-        .map(
-          (raw) => TenantEmployee.fromJson(raw.cast<String, Object?>()),
-        )
+        .map((raw) => TenantEmployee.fromJson(raw.cast<String, Object?>()))
         .toList(growable: false);
   }
 
@@ -86,24 +81,17 @@ class HttpTenantAdminRepository implements TenantAdminRepository {
   @override
   Future<List<BranchStaffGroup>> getBranchesWithEmployees() async {
     final data = await _requestList(
-      () => _client.dio.get<Object?>(
-        '/api/v1/tenant/branches/with-employees',
-      ),
+      () => _client.dio.get<Object?>('/api/v1/tenant/branches/with-employees'),
     );
     return data
         .whereType<Map>()
-        .map(
-          (raw) => BranchStaffGroup.fromJson(raw.cast<String, Object?>()),
-        )
+        .map((raw) => BranchStaffGroup.fromJson(raw.cast<String, Object?>()))
         .toList(growable: false);
   }
 
   @override
   Future<void> createBranch(Map<String, Object?> payload) => _requestVoid(
-    () => _client.dio.post<Object?>(
-      '/api/v1/tenant/branches',
-      data: payload,
-    ),
+    () => _client.dio.post<Object?>('/api/v1/tenant/branches', data: payload),
   );
 
   @override
@@ -149,10 +137,8 @@ class HttpTenantAdminRepository implements TenantAdminRepository {
   Future<TenantRole> createRole(Map<String, Object?> payload) async =>
       TenantRole.fromJson(
         await _requestMap(
-          () => _client.dio.post<Object?>(
-            '/api/v1/tenant/roles',
-            data: payload,
-          ),
+          () =>
+              _client.dio.post<Object?>('/api/v1/tenant/roles', data: payload),
         ),
       );
 
@@ -189,7 +175,9 @@ class HttpTenantAdminRepository implements TenantAdminRepository {
       final response = await request();
       final envelope = response.data;
       if (envelope is! Map || envelope['success'] != true) {
-        throw const ApiException('El servidor devolvió una respuesta no válida.');
+        throw const ApiException(
+          'El servidor devolvió una respuesta no válida.',
+        );
       }
       return envelope['data'];
     } on DioException catch (error) {

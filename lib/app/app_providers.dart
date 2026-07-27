@@ -3,11 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../features/finance/data/repositories/finance_repository.dart';
 import '../features/finance/presentation/controllers/finance_controller.dart';
-import '../features/inventory/data/repositories/inventory_repository.dart';
 import '../features/inventory/presentation/controllers/inventory_controller.dart';
 import '../features/pos/data/repositories/pos_repository.dart';
 import '../features/pos/presentation/controllers/pos_controller.dart';
-import '../features/purchasing/data/repositories/purchasing_repository.dart';
 import '../features/purchasing/presentation/controllers/purchasing_controller.dart';
 import '../features/restaurant_floor/data/repositories/restaurant_repository.dart';
 import '../features/restaurant_floor/presentation/controllers/restaurant_controller.dart';
@@ -22,12 +20,16 @@ class AppProviders extends StatefulWidget {
     super.key,
     required this.sessionController,
     required this.tenantAdminController,
+    required this.inventoryController,
+    required this.purchasingController,
     required this.superadminController,
     required this.child,
   });
 
   final TenantSessionController sessionController;
   final TenantAdminController tenantAdminController;
+  final InventoryController inventoryController;
+  final PurchasingController purchasingController;
   final SuperadminController superadminController;
   final Widget child;
 
@@ -36,8 +38,6 @@ class AppProviders extends StatefulWidget {
 }
 
 class _AppProvidersState extends State<AppProviders> {
-  late final InventoryController inventory;
-  late final PurchasingController purchasing;
   late final PosController pos;
   late final FinanceController finance;
   late final RestaurantController restaurant;
@@ -47,8 +47,6 @@ class _AppProvidersState extends State<AppProviders> {
   @override
   void initState() {
     super.initState();
-    inventory = InventoryController(MockInventoryRepository());
-    purchasing = PurchasingController(MockPurchasingRepository());
     pos = PosController(MockPosRepository());
     finance = FinanceController(MockFinanceRepository());
     restaurant = RestaurantController(MockRestaurantRepository());
@@ -64,9 +62,16 @@ class _AppProvidersState extends State<AppProviders> {
     widget.tenantAdminController.invalidate();
     if (widget.sessionController.hasAnyRole(const ['OWNER', 'MANAGER'])) {
       widget.tenantAdminController.load(force: true);
+      if (branchId != null) {
+        widget.inventoryController
+          ..setBranch(branchId)
+          ..load(branchId: branchId, force: true);
+        widget.purchasingController
+          ..setBranch(branchId)
+          ..load(branchId: branchId, force: true);
+      }
     }
     if (branchId == null) return;
-    inventory.load(branchId: branchId);
     pos.load(branchId: branchId);
     restaurant.load(branchId: branchId);
     waiter.load(branchId: branchId);
@@ -75,8 +80,6 @@ class _AppProvidersState extends State<AppProviders> {
   @override
   void dispose() {
     widget.sessionController.removeListener(_syncBranch);
-    inventory.dispose();
-    purchasing.dispose();
     pos.dispose();
     finance.dispose();
     restaurant.dispose();
@@ -89,8 +92,8 @@ class _AppProvidersState extends State<AppProviders> {
     providers: [
       ChangeNotifierProvider.value(value: widget.sessionController),
       ChangeNotifierProvider.value(value: widget.tenantAdminController),
-      ChangeNotifierProvider.value(value: inventory),
-      ChangeNotifierProvider.value(value: purchasing),
+      ChangeNotifierProvider.value(value: widget.inventoryController),
+      ChangeNotifierProvider.value(value: widget.purchasingController),
       ChangeNotifierProvider.value(value: pos),
       ChangeNotifierProvider.value(value: finance),
       ChangeNotifierProvider.value(value: restaurant),

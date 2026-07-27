@@ -130,7 +130,8 @@ class TenantRole {
                 .map((permission) {
                   if (permission is String) return permission;
                   if (permission is Map) {
-                    return (permission['code'] ?? permission['name']) as String?;
+                    return (permission['code'] ?? permission['name'])
+                        as String?;
                   }
                   return null;
                 })
@@ -157,20 +158,23 @@ class BranchStaffGroup {
   factory BranchStaffGroup.fromJson(Map<String, Object?> json) {
     List<TenantEmployee> people(Object? value) {
       if (value is! List) return const [];
-      return value.whereType<Map>().map((raw) {
-        final item = raw.cast<String, Object?>();
-        final role = _nullableMap(item['role']);
-        return TenantEmployee(
-          id: item['id']! as String,
-          name: item['fullName']! as String,
-          email: item['email']! as String,
-          status: item['status']! as String,
-          roleCode: role?['code'] as String?,
-          roleName: role?['name'] as String?,
-          branchId: json['id'] as String?,
-          branchName: json['name'] as String?,
-        );
-      }).toList(growable: false);
+      return value
+          .whereType<Map>()
+          .map((raw) {
+            final item = raw.cast<String, Object?>();
+            final role = _nullableMap(item['role']);
+            return TenantEmployee(
+              id: item['id']! as String,
+              name: item['fullName']! as String,
+              email: item['email']! as String,
+              status: item['status']! as String,
+              roleCode: role?['code'] as String?,
+              roleName: role?['name'] as String?,
+              branchId: json['id'] as String?,
+              branchName: json['name'] as String?,
+            );
+          })
+          .toList(growable: false);
     }
 
     return BranchStaffGroup(

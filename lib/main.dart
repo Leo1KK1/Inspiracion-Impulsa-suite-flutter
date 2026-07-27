@@ -4,6 +4,10 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'app/app.dart';
 import 'core/config/app_config.dart';
 import 'core/network/dio_client.dart';
+import 'features/inventory/data/repositories/inventory_repository.dart';
+import 'features/inventory/presentation/controllers/inventory_controller.dart';
+import 'features/purchasing/data/repositories/purchasing_repository.dart';
+import 'features/purchasing/presentation/controllers/purchasing_controller.dart';
 import 'features/session/data/repositories/session_repository.dart';
 import 'features/session/presentation/controllers/tenant_session_controller.dart';
 import 'features/superadmin/data/repositories/superadmin_repository.dart';
@@ -17,14 +21,19 @@ Future<void> main() async {
   await initializeDateFormatting('es_MX');
   final tenantClient = DioClient(baseUrl: AppConfig.apiBaseUrl);
   final session = TenantSessionController(
-    HttpTenantSessionRepository(
-      tenantClient,
-      PreferencesTenantSessionStore(),
-    ),
+    HttpTenantSessionRepository(tenantClient, PreferencesTenantSessionStore()),
   );
   await session.restore();
   final tenantAdmin = TenantAdminController(
     HttpTenantAdminRepository(tenantClient),
+  );
+  final inventory = InventoryController(
+    HttpInventoryRepository(tenantClient),
+    initialBranchId: session.activeBranchId,
+  );
+  final purchasing = PurchasingController(
+    HttpPurchasingRepository(tenantClient),
+    initialBranchId: session.activeBranchId,
   );
   final superadmin = SuperadminController(
     HttpSuperadminRepository(
@@ -37,6 +46,8 @@ Future<void> main() async {
     ImpulsaSuiteApp(
       sessionController: session,
       tenantAdminController: tenantAdmin,
+      inventoryController: inventory,
+      purchasingController: purchasing,
       superadminController: superadmin,
     ),
   );

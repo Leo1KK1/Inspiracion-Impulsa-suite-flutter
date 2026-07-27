@@ -6,6 +6,7 @@ import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/app_states.dart';
 import '../../../../shared/widgets/page_header.dart';
+import '../../../inventory/presentation/controllers/inventory_controller.dart';
 import '../../data/models/purchasing_models.dart';
 import '../controllers/purchasing_controller.dart';
 import '../widgets/purchase_order_status_badge.dart';
@@ -24,28 +25,34 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   @override
   void initState() {
     super.initState();
-    final controller = context.read<PurchasingController>();
-    if (controller.status == PurchasingStatus.idle) controller.load();
+    final purchasing = context.read<PurchasingController>();
+    if (purchasing.status == PurchasingStatus.idle) purchasing.load();
+    final inventory = context.read<InventoryController>();
+    if (inventory.status == InventoryStatus.idle) inventory.load();
   }
 
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<PurchasingController>();
-    if (controller.status == PurchasingStatus.loading) {
+    if (controller.status == PurchasingStatus.loading &&
+        controller.orders.isEmpty) {
       return const AppLoadingState(message: 'Cargando órdenes…');
     }
     if (controller.status == PurchasingStatus.error) {
       return AppErrorState(
-        message: controller.errorMessage!,
-        onRetry: controller.load,
+        message: controller.errorMessage ?? 'No fue posible cargar órdenes.',
+        onRetry: () => controller.load(force: true),
       );
     }
-    final orders = controller.orders.where((order) {
-      final matchesQuery =
-          order.folio.toLowerCase().contains(_query.toLowerCase()) ||
-          order.supplier.toLowerCase().contains(_query.toLowerCase());
-      return matchesQuery && (_status == null || order.status == _status);
-    }).toList();
+    final query = _query.trim().toLowerCase();
+    final orders = controller.orders
+        .where((order) {
+          return (query.isEmpty ||
+                  order.folio.toLowerCase().contains(query) ||
+                  order.supplier.toLowerCase().contains(query)) &&
+              (_status == null || order.status == _status);
+        })
+        .toList(growable: false);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.xl),
       child: Column(
@@ -53,10 +60,12 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         children: [
           PageHeader(
             title: 'Órdenes de compra',
-            subtitle: 'Crea, aprueba y recibe mercancía de proveedores.',
+            subtitle: 'Ciclo real de borrador, envío y recepción.',
             actions: [
               FilledButton.icon(
-                onPressed: () => _showOrderForm(context),
+                onPressed: controller.saving
+                    ? null
+                    : () => _showOrderForm(context),
                 icon: const Icon(Icons.add),
                 label: const Text('Nueva orden'),
               ),
@@ -78,7 +87,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                 ),
               ),
               SizedBox(
-                width: 200,
+                width: 220,
                 child: DropdownButtonFormField<PurchaseOrderStatus?>(
                   initialValue: _status,
                   decoration: const InputDecoration(labelText: 'Estado'),
@@ -87,7 +96,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                     for (final status in PurchaseOrderStatus.values)
                       DropdownMenuItem(
                         value: status,
-                        child: Text(status.name.toUpperCase()),
+                        child: Text(status.apiValue),
                       ),
                   ],
                   onChanged: (value) => setState(() => _status = value),
@@ -97,14 +106,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           ),
           const SizedBox(height: 16),
           if (orders.isEmpty)
-            OperationalEmptyState(
+            const OperationalEmptyState(
               title: 'Sin órdenes',
               message: 'No hay órdenes con los filtros seleccionados.',
-              actionLabel: 'Limpiar filtros',
-              onAction: () => setState(() {
-                _query = '';
-                _status = null;
-              }),
             )
           else
             Card(
@@ -114,9 +118,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                   columns: const [
                     DataColumn(label: Text('Folio')),
                     DataColumn(label: Text('Proveedor')),
+                    DataColumn(label: Text('Sucursal')),
                     DataColumn(label: Text('Estado')),
                     DataColumn(label: Text('Creación')),
-                    DataColumn(label: Text('Entrega')),
                     DataColumn(label: Text('Partidas'), numeric: true),
                     DataColumn(label: Text('Total'), numeric: true),
                     DataColumn(label: Text('')),
@@ -127,14 +131,12 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                         cells: [
                           DataCell(Text(order.folio)),
                           DataCell(Text(order.supplier)),
+                          DataCell(Text(order.branchName)),
                           DataCell(
                             PurchaseOrderStatusBadge(status: order.status),
                           ),
                           DataCell(Text(AppFormatters.date(order.createdAt))),
-                          DataCell(
-                            Text(AppFormatters.date(order.expectedDate)),
-                          ),
-                          DataCell(Text('${order.items}')),
+                          DataCell(Text('${order.itemsCount}')),
                           DataCell(Text(AppFormatters.currency(order.total))),
                           DataCell(
                             IconButton(
@@ -156,55 +158,126 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   }
 
   Future<void> _showOrderForm(BuildContext context) async {
-    final controller = context.read<PurchasingController>();
-    String? supplier;
-    final total = TextEditingController();
+    final purchasing = context.read<PurchasingController>();
+    final inventory = context.read<InventoryController>();
+    final suppliers = purchasing.suppliers
+        .where((item) => item.active)
+        .toList();
+    final products = inventory.products.where((item) => item.isActive).toList();
+    if (suppliers.isEmpty || products.isEmpty) {
+      _error(
+        context,
+        'Se necesita al menos un proveedor activo y un producto activo.',
+      );
+      return;
+    }
+    String supplierId = suppliers.first.id;
     final notes = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    await showDialog<void>(
+    final lines = <_OrderLineDraft>[
+      _OrderLineDraft(productId: products.first.id),
+    ];
+    final key = GlobalKey<FormState>();
+    final payload = await showDialog<Map<String, Object?>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Nueva orden de compra'),
           content: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 620),
+            constraints: const BoxConstraints(maxWidth: 720, maxHeight: 620),
             child: Form(
-              key: formKey,
+              key: key,
               child: SingleChildScrollView(
                 child: Column(
                   children: [
                     DropdownButtonFormField<String>(
-                      initialValue: supplier,
+                      initialValue: supplierId,
                       decoration: const InputDecoration(labelText: 'Proveedor'),
                       items: [
-                        for (final item in controller.suppliers)
+                        for (final supplier in suppliers)
                           DropdownMenuItem(
-                            value: item.name,
-                            child: Text(item.name),
+                            value: supplier.id,
+                            child: Text(supplier.name),
                           ),
                       ],
-                      validator: (value) =>
-                          value == null ? 'Selecciona un proveedor.' : null,
-                      onChanged: (value) =>
-                          setDialogState(() => supplier = value),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: total,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Total estimado',
+                      onChanged: (value) => setDialogState(
+                        () => supplierId = value ?? supplierId,
                       ),
-                      validator: (value) =>
-                          (double.tryParse(value ?? '') ?? 0) <= 0
-                          ? 'Ingresa un monto válido.'
-                          : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: notes,
-                      maxLines: 3,
+                      maxLines: 2,
                       decoration: const InputDecoration(labelText: 'Notas'),
+                    ),
+                    const SizedBox(height: 16),
+                    for (var index = 0; index < lines.length; index++)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: DropdownButtonFormField<String>(
+                                initialValue: lines[index].productId,
+                                decoration: const InputDecoration(
+                                  labelText: 'Producto',
+                                ),
+                                items: [
+                                  for (final product in products)
+                                    DropdownMenuItem(
+                                      value: product.id,
+                                      child: Text(product.name),
+                                    ),
+                                ],
+                                onChanged: (value) => setDialogState(
+                                  () => lines[index].productId =
+                                      value ?? lines[index].productId,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextFormField(
+                                controller: lines[index].quantity,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Cantidad',
+                                ),
+                                validator: _positiveInteger,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextFormField(
+                                controller: lines[index].cost,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Costo',
+                                ),
+                                validator: _nonNegative,
+                              ),
+                            ),
+                            if (lines.length > 1)
+                              IconButton(
+                                onPressed: () => setDialogState(() {
+                                  lines.removeAt(index).dispose();
+                                }),
+                                icon: const Icon(Icons.remove_circle_outline),
+                              ),
+                          ],
+                        ),
+                      ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () => setDialogState(
+                          () => lines.add(
+                            _OrderLineDraft(productId: products.first.id),
+                          ),
+                        ),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Agregar partida'),
+                      ),
                     ),
                   ],
                 ),
@@ -218,32 +291,66 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
             ),
             FilledButton(
               onPressed: () {
-                if (!formKey.currentState!.validate()) return;
-                controller.addOrder(
-                  PurchaseOrder(
-                    id: 'po-${controller.orders.length + 1}',
-                    folio:
-                        'OC-2026-${(controller.orders.length + 47).toString().padLeft(4, '0')}',
-                    supplier: supplier!,
-                    status: PurchaseOrderStatus.draft,
-                    createdAt: DateTime.now(),
-                    expectedDate: DateTime.now().add(const Duration(days: 7)),
-                    items: 1,
-                    total: double.parse(total.text),
-                    notes: notes.text,
-                    createdBy: 'M. López',
-                  ),
-                );
-                Navigator.pop(dialogContext);
-                AppSuccessFeedback.show(context, 'Orden creada como borrador.');
+                if (!key.currentState!.validate()) return;
+                Navigator.pop(dialogContext, {
+                  'supplierId': supplierId,
+                  if (notes.text.trim().isNotEmpty) 'notes': notes.text.trim(),
+                  'items': [
+                    for (final line in lines)
+                      {
+                        'productId': line.productId,
+                        'quantityOrdered': int.parse(line.quantity.text),
+                        'unitCost': double.parse(line.cost.text),
+                      },
+                  ],
+                });
               },
-              child: const Text('Crear orden'),
+              child: const Text('Crear borrador'),
             ),
           ],
         ),
       ),
     );
-    total.dispose();
     notes.dispose();
+    for (final line in lines) {
+      line.dispose();
+    }
+    if (payload == null || !context.mounted) return;
+    final ok = await purchasing.createOrder(payload);
+    if (!context.mounted) return;
+    if (ok) {
+      AppSuccessFeedback.show(context, 'Orden creada como borrador.');
+    } else {
+      _error(context, purchasing.errorMessage);
+    }
+  }
+
+  static String? _positiveInteger(String? value) {
+    final number = int.tryParse(value ?? '');
+    return number == null || number <= 0 ? 'Entero > 0' : null;
+  }
+
+  static String? _nonNegative(String? value) {
+    final number = double.tryParse(value ?? '');
+    return number == null || number < 0 ? 'Valor inválido' : null;
+  }
+
+  static void _error(BuildContext context, String? message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message ?? 'No fue posible guardar la orden.')),
+    );
+  }
+}
+
+class _OrderLineDraft {
+  _OrderLineDraft({required this.productId});
+
+  String productId;
+  final quantity = TextEditingController(text: '1');
+  final cost = TextEditingController(text: '0');
+
+  void dispose() {
+    quantity.dispose();
+    cost.dispose();
   }
 }

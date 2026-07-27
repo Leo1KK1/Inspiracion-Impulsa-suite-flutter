@@ -151,9 +151,7 @@ class HttpTenantSessionRepository implements SessionRepository {
   @override
   Future<void> logout() async {
     try {
-      await _requestData(
-        () => _client.dio.post<Object?>('$_authBase/logout'),
-      );
+      await _requestData(() => _client.dio.post<Object?>('$_authBase/logout'));
     } finally {
       await _clearLocal();
     }
@@ -247,10 +245,7 @@ class HttpTenantSessionRepository implements SessionRepository {
     );
   }
 
-  TenantSession _fromMe(
-    TenantSession stored,
-    Map<String, Object?> data,
-  ) {
+  TenantSession _fromMe(TenantSession stored, Map<String, Object?> data) {
     final tenant = _map(data['tenant']);
     final session = _map(data['session']);
     return stored.copyWith(
@@ -298,7 +293,9 @@ class HttpTenantSessionRepository implements SessionRepository {
       final response = await request();
       final envelope = response.data;
       if (envelope is! Map || envelope['success'] != true) {
-        throw const ApiException('El servidor devolvió una respuesta no válida.');
+        throw const ApiException(
+          'El servidor devolvió una respuesta no válida.',
+        );
       }
       return envelope['data'];
     } on DioException catch (error) {
@@ -320,17 +317,17 @@ class HttpTenantSessionRepository implements SessionRepository {
     return value.cast<String, Object?>();
   }
 
-  static List<String> _strings(Object? value) =>
-      value is List ? value.whereType<String>().toList(growable: false) : const [];
+  static List<String> _strings(Object? value) => value is List
+      ? value.whereType<String>().toList(growable: false)
+      : const [];
 
   static List<TenantBranchAccess> _branches(Object? value) {
     if (value is! List) return const [];
     return value
         .whereType<Map>()
         .map(
-          (branch) => TenantBranchAccess.fromJson(
-            branch.cast<String, Object?>(),
-          ),
+          (branch) =>
+              TenantBranchAccess.fromJson(branch.cast<String, Object?>()),
         )
         .toList(growable: false);
   }

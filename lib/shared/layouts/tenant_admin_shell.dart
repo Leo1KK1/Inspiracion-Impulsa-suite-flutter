@@ -119,11 +119,7 @@ class _TenantNavigation extends StatelessWidget {
       ),
       _NavItem('/app/admin/users', 'Empleados', Icons.people_outline),
       _NavItem('/app/admin/roles', 'Roles', Icons.shield_outlined),
-      _NavItem(
-        '/app/admin/multibranch',
-        'Multisucursal',
-        Icons.hub_outlined,
-      ),
+      _NavItem('/app/admin/multibranch', 'Multisucursal', Icons.hub_outlined),
     ]),
     _NavGroup('Inventario', [
       _NavItem(
@@ -221,10 +217,7 @@ class _TenantNavigation extends StatelessWidget {
               ),
               subtitle: Text(
                 session?.tenantStatus ?? '',
-                style: const TextStyle(
-                  color: Color(0xFF5F8E8A),
-                  fontSize: 11,
-                ),
+                style: const TextStyle(color: Color(0xFF5F8E8A), fontSize: 11),
               ),
             ),
             InkWell(

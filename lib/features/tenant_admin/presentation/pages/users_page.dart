@@ -47,9 +47,7 @@ class _TenantUsersPageState extends State<TenantUsersPage> {
             subtitle: 'Usuarios y asignaciones devueltos por el backend.',
             actions: [
               FilledButton.icon(
-                onPressed: controller.saving
-                    ? null
-                    : () => _showForm(context),
+                onPressed: controller.saving ? null : () => _showForm(context),
                 icon: const Icon(Icons.person_add_alt_1),
                 label: const Text('Nuevo empleado'),
               ),
@@ -81,8 +79,12 @@ class _TenantUsersPageState extends State<TenantUsersPage> {
                           cells: [
                             DataCell(Text(user.name)),
                             DataCell(Text(user.email)),
-                            DataCell(RoleBadge(role: user.roleCode ?? 'SIN ROL')),
-                            DataCell(Text(user.branchName ?? 'Tenant completo')),
+                            DataCell(
+                              RoleBadge(role: user.roleCode ?? 'SIN ROL'),
+                            ),
+                            DataCell(
+                              Text(user.branchName ?? 'Tenant completo'),
+                            ),
                             DataCell(
                               AppBadge(
                                 label: user.status,
@@ -176,7 +178,9 @@ class _TenantUsersPageState extends State<TenantUsersPage> {
         builder: (context, setDialogState) {
           final requiresBranch = roleCode == 'CASHIER' || roleCode == 'WAITER';
           return AlertDialog(
-            title: Text(employee == null ? 'Nuevo empleado' : 'Editar empleado'),
+            title: Text(
+              employee == null ? 'Nuevo empleado' : 'Editar empleado',
+            ),
             content: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 500),
               child: Form(
@@ -224,24 +228,25 @@ class _TenantUsersPageState extends State<TenantUsersPage> {
                               child: Text(role.name),
                             ),
                         ],
-                        onChanged: (value) => setDialogState(
-                          () => roleCode = value ?? roleCode,
-                        ),
+                        onChanged: (value) =>
+                            setDialogState(() => roleCode = value ?? roleCode),
                       ),
                       if (requiresBranch) ...[
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                          initialValue: admin.branches.any(
-                            (branch) => branch.id == branchId,
-                          )
+                          initialValue:
+                              admin.branches.any(
+                                (branch) => branch.id == branchId,
+                              )
                               ? branchId
                               : null,
                           decoration: const InputDecoration(
                             labelText: 'Sucursal',
                           ),
                           items: [
-                            for (final branch in admin.branches
-                                .where((branch) => branch.isActive))
+                            for (final branch in admin.branches.where(
+                              (branch) => branch.isActive,
+                            ))
                               DropdownMenuItem(
                                 value: branch.id,
                                 child: Text(branch.name),

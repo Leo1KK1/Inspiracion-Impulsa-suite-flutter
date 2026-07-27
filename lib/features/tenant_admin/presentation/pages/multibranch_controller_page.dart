@@ -86,7 +86,9 @@ class _MultibranchControllerPageState extends State<MultibranchControllerPage> {
                         ),
                         for (final person in group.managers)
                           ListTile(
-                            leading: const Icon(Icons.admin_panel_settings_outlined),
+                            leading: const Icon(
+                              Icons.admin_panel_settings_outlined,
+                            ),
                             title: Text(person.name),
                             subtitle: Text(person.email),
                             trailing: RoleBadge(
@@ -101,9 +103,7 @@ class _MultibranchControllerPageState extends State<MultibranchControllerPage> {
                         ),
                       ),
                       if (group.employees.isEmpty)
-                        const ListTile(
-                          title: Text('Sin personal asignado'),
-                        )
+                        const ListTile(title: Text('Sin personal asignado'))
                       else
                         for (final person in group.employees)
                           ListTile(

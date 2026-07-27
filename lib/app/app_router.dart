@@ -108,8 +108,7 @@ String? _redirect(
       location != '/app/tenant-suspended') {
     return tenantRedirect;
   }
-  if (location == '/app/access-denied' ||
-      location == '/app/tenant-suspended') {
+  if (location == '/app/access-denied' || location == '/app/tenant-suspended') {
     return null;
   }
 

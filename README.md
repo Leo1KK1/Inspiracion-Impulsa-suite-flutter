@@ -17,17 +17,16 @@ flutter pub get
 flutter run -d edge --dart-define=API_BASE_URL=http://localhost:3000
 ```
 
-`API_BASE_URL` usa `http://localhost:3000` de forma predeterminada. HU01
-consume las 12 rutas reales bajo `/api/v1/superadmin` y persiste su sesión con
-una clave separada de la sesión tenant.
+`API_BASE_URL` usa `http://localhost:3000` de forma predeterminada.
 
-Las historias posteriores continúan en migración por fases. Mientras HU02 no
-se integre, la cuenta tenant de desarrollo es:
+- HU01 consume las rutas reales de Superadmin bajo `/api/v1/superadmin`.
+- HU02 consume autenticación, sesión, sucursales, usuarios y roles reales.
+- HU03 consume catálogo, inventario, alertas, movimientos, proveedores y
+  órdenes de compra reales.
 
-- Correo: `m.lopez@grupovega.mx`
-- Contraseña: cualquier valor no vacío, por ejemplo `demo1234`
-- Roles: `OWNER`, `BRANCH_MANAGER`, `CASHIER` y `WAITER`
-- Sucursal inicial: `CDMX-01`
+Cada contexto conserva su propia sesión. El frontend no incluye credenciales
+tenant ni datos simulados para HU01-HU03; deben usarse cuentas existentes en el
+backend local. HU04 y posteriores continúan migrándose por fases.
 
 ## Calidad
 
@@ -40,9 +39,9 @@ flutter build web --dart-define=API_BASE_URL=http://localhost:3000
 
 ### `flutter analyze` y rutas con caracteres no ASCII
 
-Flutter 3.44.4 puede fallar al analizar desde rutas que contienen caracteres
-no ASCII. Este proyecto incluye un comando que crea una unidad ASCII temporal,
-ejecuta el análisis sobre los mismos archivos y elimina la unidad al terminar:
+Flutter puede fallar al analizar desde rutas que contienen caracteres no ASCII.
+Este proyecto incluye un comando que crea una unidad ASCII temporal, ejecuta el
+análisis sobre los mismos archivos y elimina la unidad al terminar:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tool\flutter_analyze.ps1
@@ -61,4 +60,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tool\flutter_analyze.ps1 -
 - `lib/shared`: shells, estados y widgets transversales.
 - `lib/features`: sesión, tenant, inventario, compras, POS, finanzas,
   analítica, restaurante, mesero y superadmin.
-- `test`: persistencia de sesión, contratos HU01 y regresiones de layout.
+- `test`: persistencia de sesión, contratos por HU y regresiones de layout.

@@ -12,10 +12,11 @@ class PurchaseOrderStatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final (label, color) = switch (status) {
       PurchaseOrderStatus.draft => ('BORRADOR', AppColors.mutedForeground),
-      PurchaseOrderStatus.pending => ('PENDIENTE', AppColors.primary),
-      PurchaseOrderStatus.approved => ('APROBADA', AppColors.success),
-      PurchaseOrderStatus.sent => ('ENVIADA', const Color(0xFF7C3AED)),
-      PurchaseOrderStatus.partial => ('PARCIAL', AppColors.warning),
+      PurchaseOrderStatus.submitted => ('ENVIADA', const Color(0xFF7C3AED)),
+      PurchaseOrderStatus.partiallyReceived => (
+        'RECIBIDA PARCIAL',
+        AppColors.warning,
+      ),
       PurchaseOrderStatus.received => ('RECIBIDA', AppColors.success),
       PurchaseOrderStatus.cancelled => ('CANCELADA', AppColors.destructive),
     };

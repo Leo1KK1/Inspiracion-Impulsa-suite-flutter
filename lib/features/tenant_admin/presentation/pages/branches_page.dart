@@ -109,13 +109,17 @@ class _BranchesPageState extends State<BranchesPage> {
                           Row(
                             children: [
                               const CircleAvatar(
-                                child: Icon(Icons.store_mall_directory_outlined),
+                                child: Icon(
+                                  Icons.store_mall_directory_outlined,
+                                ),
                               ),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
                                   branch.name,
-                                  style: Theme.of(context).textTheme.titleMedium,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
                                 ),
                               ),
                               AppBadge(
@@ -134,9 +138,11 @@ class _BranchesPageState extends State<BranchesPage> {
                               fontWeight: FontWeight.w700,
                             ),
                           ),
-                          Text(branch.address?.trim().isNotEmpty == true
-                              ? branch.address!
-                              : 'Sin dirección registrada'),
+                          Text(
+                            branch.address?.trim().isNotEmpty == true
+                                ? branch.address!
+                                : 'Sin dirección registrada',
+                          ),
                           const Spacer(),
                           const Divider(),
                           Row(
@@ -200,10 +206,7 @@ class _BranchesPageState extends State<BranchesPage> {
     }
   }
 
-  Future<void> _showBranchForm(
-    BuildContext context, {
-    Branch? branch,
-  }) async {
+  Future<void> _showBranchForm(BuildContext context, {Branch? branch}) async {
     final name = TextEditingController(text: branch?.name);
     final code = TextEditingController(text: branch?.code);
     final address = TextEditingController(text: branch?.address);

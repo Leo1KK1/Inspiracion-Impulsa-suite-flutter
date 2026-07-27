@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
+import '../features/inventory/presentation/controllers/inventory_controller.dart';
+import '../features/purchasing/presentation/controllers/purchasing_controller.dart';
 import '../features/session/presentation/controllers/tenant_session_controller.dart';
 import '../features/superadmin/presentation/controllers/superadmin_controller.dart';
 import '../features/tenant_admin/presentation/controllers/tenant_admin_controller.dart';
@@ -12,11 +14,15 @@ class ImpulsaSuiteApp extends StatefulWidget {
     super.key,
     required this.sessionController,
     required this.tenantAdminController,
+    required this.inventoryController,
+    required this.purchasingController,
     required this.superadminController,
   });
 
   final TenantSessionController sessionController;
   final TenantAdminController tenantAdminController;
+  final InventoryController inventoryController;
+  final PurchasingController purchasingController;
   final SuperadminController superadminController;
 
   @override
@@ -39,6 +45,8 @@ class _ImpulsaSuiteAppState extends State<ImpulsaSuiteApp> {
   Widget build(BuildContext context) => AppProviders(
     sessionController: widget.sessionController,
     tenantAdminController: widget.tenantAdminController,
+    inventoryController: widget.inventoryController,
+    purchasingController: widget.purchasingController,
     superadminController: widget.superadminController,
     child: MaterialApp.router(
       title: 'Impulsa Suite',

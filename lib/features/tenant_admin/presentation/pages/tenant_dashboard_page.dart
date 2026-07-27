@@ -31,9 +31,9 @@ class _TenantDashboardPageState extends State<TenantDashboardPage> {
   Widget build(BuildContext context) {
     final admin = context.watch<TenantAdminController>();
     final session = context.watch<TenantSessionController>().session;
-    final canViewAdmin = context
-        .watch<TenantSessionController>()
-        .hasAnyRole(const ['OWNER', 'MANAGER']);
+    final canViewAdmin = context.watch<TenantSessionController>().hasAnyRole(
+      const ['OWNER', 'MANAGER'],
+    );
     if (!canViewAdmin) {
       return _OperationalLanding(session: session);
     }

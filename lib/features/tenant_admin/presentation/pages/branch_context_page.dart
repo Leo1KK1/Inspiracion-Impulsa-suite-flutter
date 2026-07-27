@@ -102,7 +102,9 @@ class _BranchContextPageState extends State<BranchContextPage> {
                               Expanded(
                                 child: Text(
                                   branch.name,
-                                  style: Theme.of(context).textTheme.titleMedium,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
                                 ),
                               ),
                               if (selected)
