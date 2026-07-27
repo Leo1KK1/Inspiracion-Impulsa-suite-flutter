@@ -1,0 +1,48 @@
+import '../features/session/presentation/controllers/tenant_session_controller.dart';
+
+abstract final class TenantGuard {
+  static String? redirect(TenantSessionController session, String location) {
+    if (!session.isAuthenticated) {
+      return '/tenant-login?from=${Uri.encodeComponent(location)}';
+    }
+    if (!session.isTenant) return '/app/access-denied';
+    return null;
+  }
+}
+
+abstract final class BranchContextGuard {
+  static String? redirect(TenantSessionController session) {
+    if (session.activeBranchId == null) return '/app/branch-context';
+    return null;
+  }
+}
+
+abstract final class RoleGuard {
+  static String? redirect(
+    TenantSessionController session,
+    Iterable<String> roles,
+  ) {
+    return session.hasAnyRole(roles) ? null : '/app/access-denied';
+  }
+}
+
+abstract final class AdminRoleGuard {
+  static const roles = ['OWNER', 'BRANCH_MANAGER', 'MANAGER', 'SUPER_ADMIN'];
+
+  static String? redirect(TenantSessionController session) =>
+      RoleGuard.redirect(session, roles);
+}
+
+abstract final class WaiterRoleGuard {
+  static const roles = ['WAITER', 'BRANCH_MANAGER', 'OWNER', 'SUPERVISOR'];
+
+  static String? redirect(TenantSessionController session) =>
+      RoleGuard.redirect(session, roles);
+}
+
+abstract final class PosRoleGuard {
+  static const roles = ['CASHIER', 'MANAGER', 'OWNER', 'BRANCH_MANAGER'];
+
+  static String? redirect(TenantSessionController session) =>
+      RoleGuard.redirect(session, roles);
+}
