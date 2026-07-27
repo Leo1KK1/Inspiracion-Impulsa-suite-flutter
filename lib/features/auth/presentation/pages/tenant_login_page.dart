@@ -14,45 +14,34 @@ class TenantLoginPage extends StatefulWidget {
 }
 
 class _TenantLoginPageState extends State<TenantLoginPage> {
-  static const _mockEmail = 'm.lopez@grupovega.mx';
-  static const _mockPassword = 'demo1234';
-
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController(text: _mockEmail);
-  final _passwordController = TextEditingController(text: _mockPassword);
+  final _tenantSlug = TextEditingController();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
   bool _obscurePassword = true;
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
+    _tenantSlug.dispose();
+    _email.dispose();
+    _password.dispose();
     super.dispose();
-  }
-
-  String? get _resolvedTenant {
-    final email = _emailController.text.toLowerCase();
-    if (!email.contains('@')) return null;
-    if (email.contains('grupovega')) return 'Grupo Vega S.A.';
-    if (email.contains('clinicorp')) return 'Clinicorp LATAM';
-    if (email.contains('biofarma')) return 'BioFarma MX';
-    if (email.contains('hotelgrup')) return 'HotelGrup Caribe';
-    return 'Tenant detectado';
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    final session = context.read<TenantSessionController>();
-    final success = await session.loginTenant(
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
+    final success = await context.read<TenantSessionController>().loginTenant(
+      tenantSlug: _tenantSlug.text,
+      email: _email.text,
+      password: _password.text,
     );
     if (success && mounted) context.go('/app/dashboard');
   }
 
   @override
   Widget build(BuildContext context) {
-    final status = context.watch<TenantSessionController>().status;
-    final loading = status == SessionStatus.restoring;
+    final session = context.watch<TenantSessionController>();
+    final loading = session.status == SessionStatus.restoring;
     return Scaffold(
       body: Row(
         children: [
@@ -79,63 +68,39 @@ class _TenantLoginPageState extends State<TenantLoginPage> {
                           ),
                           const SizedBox(height: 5),
                           const Text(
-                            'Usa el correo de tu organización para acceder.',
+                            'Ingresa los datos reales de tu organización.',
                             style: TextStyle(color: AppColors.mutedForeground),
                           ),
                           const SizedBox(height: 28),
                           TextFormField(
-                            controller: _emailController,
+                            controller: _tenantSlug,
+                            autocorrect: false,
+                            decoration: const InputDecoration(
+                              labelText: 'Identificador del negocio',
+                              hintText: 'mi-negocio',
+                              prefixIcon: Icon(Icons.business_outlined),
+                            ),
+                            validator: _required,
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _email,
                             keyboardType: TextInputType.emailAddress,
-                            onChanged: (_) => setState(() {}),
                             decoration: const InputDecoration(
                               labelText: 'Correo corporativo',
                               hintText: 'usuario@tuempresa.com',
                               prefixIcon: Icon(Icons.mail_outline),
                             ),
-                            validator: (value) {
-                              if (value == null || !value.contains('@')) {
-                                return 'Ingresa un correo corporativo válido.';
-                              }
-                              return null;
-                            },
+                            validator: (value) =>
+                                value != null && value.contains('@')
+                                ? null
+                                : 'Ingresa un correo válido.',
                           ),
-                          if (_resolvedTenant case final tenant?) ...[
-                            const SizedBox(height: 9),
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: AppColors.tenantAccent.withValues(
-                                  alpha: 0.1,
-                                ),
-                                borderRadius: BorderRadius.circular(
-                                  AppRadii.md,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.check_circle_outline,
-                                    color: AppColors.tenantAccent,
-                                    size: 17,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'Workspace detectado: $tenant',
-                                      style: const TextStyle(
-                                        color: AppColors.tenantAccent,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
                           const SizedBox(height: 16),
                           TextFormField(
-                            controller: _passwordController,
+                            controller: _password,
                             obscureText: _obscurePassword,
+                            onFieldSubmitted: (_) => loading ? null : _submit(),
                             decoration: InputDecoration(
                               labelText: 'Contraseña',
                               prefixIcon: const Icon(Icons.lock_outline),
@@ -150,23 +115,21 @@ class _TenantLoginPageState extends State<TenantLoginPage> {
                                 ),
                               ),
                             ),
-                            validator: (value) => value == null || value.isEmpty
-                                ? 'La contraseña es obligatoria.'
-                                : null,
+                            validator: (value) =>
+                                value != null && value.length >= 8
+                                ? null
+                                : 'Usa al menos 8 caracteres.',
                           ),
-                          const SizedBox(height: 14),
-                          Row(
-                            children: [
-                              Checkbox(value: false, onChanged: (_) {}),
-                              const Text('Recordarme'),
-                              const Spacer(),
-                              TextButton(
-                                onPressed: () {},
-                                child: const Text('Olvidé mi contraseña'),
+                          if (session.errorMessage case final error?) ...[
+                            const SizedBox(height: 14),
+                            Text(
+                              error,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
+                            ),
+                          ],
+                          const SizedBox(height: 18),
                           FilledButton.icon(
                             onPressed: loading ? null : _submit,
                             icon: loading
@@ -199,6 +162,9 @@ class _TenantLoginPageState extends State<TenantLoginPage> {
       ),
     );
   }
+
+  static String? _required(String? value) =>
+      value == null || value.trim().isEmpty ? 'Campo obligatorio.' : null;
 }
 
 class _Brand extends StatelessWidget {
@@ -254,25 +220,10 @@ class _LoginHero extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           const Text(
-            'Gestiona sucursales, inventario, ventas y restaurante desde un solo workspace.',
+            'Gestiona sucursales, personal y permisos desde un solo workspace.',
             style: TextStyle(color: Color(0xFF94D2CD), height: 1.5),
           ),
           const Spacer(),
-          for (final module in ['Restaurante', 'Retail', 'Logística'])
-            Padding(
-              padding: const EdgeInsets.only(top: 9),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.check_circle,
-                    color: Color(0xFF5EEAD4),
-                    size: 17,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(module, style: const TextStyle(color: Colors.white)),
-                ],
-              ),
-            ),
         ],
       ),
     ),
@@ -295,7 +246,7 @@ class _SecurityNotice extends StatelessWidget {
         SizedBox(width: 10),
         Expanded(
           child: Text(
-            'Sesión cifrada. Acceso limitado a usuarios autorizados.',
+            'La sesión se valida directamente con el servidor.',
             style: TextStyle(color: AppColors.mutedForeground, fontSize: 12),
           ),
         ),

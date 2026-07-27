@@ -6,6 +6,9 @@ abstract final class TenantGuard {
       return '/tenant-login?from=${Uri.encodeComponent(location)}';
     }
     if (!session.isTenant) return '/app/access-denied';
+    if (session.session?.tenantStatus != 'ACTIVE') {
+      return '/app/tenant-suspended';
+    }
     return null;
   }
 }
@@ -27,21 +30,21 @@ abstract final class RoleGuard {
 }
 
 abstract final class AdminRoleGuard {
-  static const roles = ['OWNER', 'BRANCH_MANAGER', 'MANAGER', 'SUPER_ADMIN'];
+  static const roles = ['OWNER', 'MANAGER'];
 
   static String? redirect(TenantSessionController session) =>
       RoleGuard.redirect(session, roles);
 }
 
 abstract final class WaiterRoleGuard {
-  static const roles = ['WAITER', 'BRANCH_MANAGER', 'OWNER', 'SUPERVISOR'];
+  static const roles = ['WAITER', 'MANAGER', 'OWNER'];
 
   static String? redirect(TenantSessionController session) =>
       RoleGuard.redirect(session, roles);
 }
 
 abstract final class PosRoleGuard {
-  static const roles = ['CASHIER', 'MANAGER', 'OWNER', 'BRANCH_MANAGER'];
+  static const roles = ['CASHIER', 'MANAGER', 'OWNER'];
 
   static String? redirect(TenantSessionController session) =>
       RoleGuard.redirect(session, roles);

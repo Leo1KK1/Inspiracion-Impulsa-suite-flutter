@@ -1,126 +1,199 @@
+import 'package:dio/dio.dart';
+
+import '../../../../core/network/api_exception.dart';
+import '../../../../core/network/dio_client.dart';
 import '../models/tenant_admin_models.dart';
 
 abstract interface class TenantAdminRepository {
+  Future<TenantDashboardMetrics> getDashboard();
   Future<List<Branch>> getBranches();
   Future<List<TenantEmployee>> getEmployees();
   Future<List<TenantRole>> getRoles();
+  Future<List<BranchStaffGroup>> getBranchesWithEmployees();
+  Future<void> createBranch(Map<String, Object?> payload);
+  Future<void> updateBranch(String id, Map<String, Object?> payload);
+  Future<void> changeBranchStatus(String id, String status);
+  Future<void> createEmployee(Map<String, Object?> payload);
+  Future<void> updateEmployee(String id, Map<String, Object?> payload);
+  Future<void> changeEmployeeStatus(String id, String status);
+  Future<TenantRole> createRole(Map<String, Object?> payload);
 }
 
-class MockTenantAdminRepository implements TenantAdminRepository {
+class HttpTenantAdminRepository implements TenantAdminRepository {
+  HttpTenantAdminRepository(this._client);
+
+  final DioClient _client;
+
+  @override
+  Future<TenantDashboardMetrics> getDashboard() async =>
+      TenantDashboardMetrics.fromJson(
+        await _requestMap(
+          () => _client.dio.get<Object?>('/api/v1/tenant/dashboard'),
+        ),
+      );
+
   @override
   Future<List<Branch>> getBranches() async {
-    await Future<void>.delayed(const Duration(milliseconds: 260));
-    return const [
-      Branch(
-        id: 'CDMX-01',
-        name: 'Sucursal CDMX Centro',
-        city: 'Ciudad de México',
-        address: 'Av. Reforma 245, Cuauhtémoc',
-        status: 'ACTIVA',
-        salesToday: 55240,
-        employees: 24,
+    final results = await Future.wait([
+      _requestList(
+        () => _client.dio.get<Object?>('/api/v1/tenant/branches'),
       ),
-      Branch(
-        id: 'CDMX-02',
-        name: 'Sucursal Polanco',
-        city: 'Ciudad de México',
-        address: 'Masaryk 188, Polanco',
-        status: 'ACTIVA',
-        salesToday: 48710,
-        employees: 18,
+      _requestList(
+        () => _client.dio.get<Object?>(
+          '/api/v1/tenant/branches/employee-count',
+        ),
       ),
-      Branch(
-        id: 'GDL-01',
-        name: 'Sucursal Guadalajara',
-        city: 'Guadalajara',
-        address: 'Av. Vallarta 1420',
-        status: 'ACTIVA',
-        salesToday: 39580,
-        employees: 19,
-      ),
-      Branch(
-        id: 'MTY-01',
-        name: 'Sucursal Monterrey',
-        city: 'Monterrey',
-        address: 'Calzada del Valle 410',
-        status: 'MANTENIMIENTO',
-        salesToday: 0,
-        employees: 12,
-      ),
-    ];
+    ]);
+    final counts = <String, int>{
+      for (final raw in results[1].whereType<Map>())
+        if (raw['branchId'] is String)
+          raw['branchId']! as String:
+              (raw['employeeCount'] as num?)?.toInt() ?? 0,
+    };
+    return results[0]
+        .whereType<Map>()
+        .map((raw) {
+          final branch = Branch.fromJson(raw.cast<String, Object?>());
+          return branch.copyWith(employeeCount: counts[branch.id] ?? 0);
+        })
+        .toList(growable: false);
   }
 
   @override
   Future<List<TenantEmployee>> getEmployees() async {
-    await Future<void>.delayed(const Duration(milliseconds: 260));
-    return const [
-      TenantEmployee(
-        id: 'USR-104',
-        name: 'María López',
-        email: 'm.lopez@grupovega.mx',
-        role: 'BRANCH_MANAGER',
-        branchIds: ['CDMX-01', 'CDMX-02'],
-        active: true,
-      ),
-      TenantEmployee(
-        id: 'USR-118',
-        name: 'Carlos Méndez',
-        email: 'c.mendez@grupovega.mx',
-        role: 'CASHIER',
-        branchIds: ['CDMX-01'],
-        active: true,
-      ),
-      TenantEmployee(
-        id: 'USR-126',
-        name: 'Sofía Reyes',
-        email: 's.reyes@grupovega.mx',
-        role: 'WAITER',
-        branchIds: ['CDMX-01'],
-        active: true,
-      ),
-      TenantEmployee(
-        id: 'USR-139',
-        name: 'Diego Flores',
-        email: 'd.flores@grupovega.mx',
-        role: 'INVENTORY_CLERK',
-        branchIds: ['GDL-01'],
-        active: false,
-      ),
-    ];
+    final data = await _requestList(
+      () => _client.dio.get<Object?>('/api/v1/tenant/users'),
+    );
+    return data
+        .whereType<Map>()
+        .map(
+          (raw) => TenantEmployee.fromJson(raw.cast<String, Object?>()),
+        )
+        .toList(growable: false);
   }
 
   @override
   Future<List<TenantRole>> getRoles() async {
-    await Future<void>.delayed(const Duration(milliseconds: 220));
-    return const [
-      TenantRole(
-        code: 'OWNER',
-        name: 'Propietario',
-        description: 'Acceso total al tenant y todas sus sucursales.',
-        permissions: ['Administración', 'Finanzas', 'Operación', 'Reportes'],
-        users: 2,
+    final data = await _requestList(
+      () => _client.dio.get<Object?>('/api/v1/tenant/roles'),
+    );
+    return data
+        .whereType<Map>()
+        .map((raw) => TenantRole.fromJson(raw.cast<String, Object?>()))
+        .toList(growable: false);
+  }
+
+  @override
+  Future<List<BranchStaffGroup>> getBranchesWithEmployees() async {
+    final data = await _requestList(
+      () => _client.dio.get<Object?>(
+        '/api/v1/tenant/branches/with-employees',
       ),
-      TenantRole(
-        code: 'BRANCH_MANAGER',
-        name: 'Gerente de sucursal',
-        description: 'Administra operación y personal de sucursales asignadas.',
-        permissions: ['Inventario', 'Compras', 'POS', 'Restaurante'],
-        users: 8,
-      ),
-      TenantRole(
-        code: 'CASHIER',
-        name: 'Cajero',
-        description: 'Opera POS, turnos, pagos y tickets.',
-        permissions: ['POS', 'Turnos', 'Tickets'],
-        users: 14,
-      ),
-      TenantRole(
-        code: 'WAITER',
-        name: 'Mesero',
-        description: 'Gestiona mesas, comandas y división de cuenta.',
-        permissions: ['Mesas', 'Comandas'],
-        users: 21,
-      ),
-    ];
+    );
+    return data
+        .whereType<Map>()
+        .map(
+          (raw) => BranchStaffGroup.fromJson(raw.cast<String, Object?>()),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> createBranch(Map<String, Object?> payload) => _requestVoid(
+    () => _client.dio.post<Object?>(
+      '/api/v1/tenant/branches',
+      data: payload,
+    ),
+  );
+
+  @override
+  Future<void> updateBranch(String id, Map<String, Object?> payload) =>
+      _requestVoid(
+        () => _client.dio.patch<Object?>(
+          '/api/v1/tenant/branches/$id',
+          data: payload,
+        ),
+      );
+
+  @override
+  Future<void> changeBranchStatus(String id, String status) => _requestVoid(
+    () => _client.dio.patch<Object?>(
+      '/api/v1/tenant/branches/$id/status',
+      data: {'status': status},
+    ),
+  );
+
+  @override
+  Future<void> createEmployee(Map<String, Object?> payload) => _requestVoid(
+    () => _client.dio.post<Object?>('/api/v1/tenant/users', data: payload),
+  );
+
+  @override
+  Future<void> updateEmployee(String id, Map<String, Object?> payload) =>
+      _requestVoid(
+        () => _client.dio.patch<Object?>(
+          '/api/v1/tenant/users/$id',
+          data: payload,
+        ),
+      );
+
+  @override
+  Future<void> changeEmployeeStatus(String id, String status) => _requestVoid(
+    () => _client.dio.patch<Object?>(
+      '/api/v1/tenant/users/$id/status',
+      data: {'status': status},
+    ),
+  );
+
+  @override
+  Future<TenantRole> createRole(Map<String, Object?> payload) async =>
+      TenantRole.fromJson(
+        await _requestMap(
+          () => _client.dio.post<Object?>(
+            '/api/v1/tenant/roles',
+            data: payload,
+          ),
+        ),
+      );
+
+  Future<Map<String, Object?>> _requestMap(
+    Future<Response<Object?>> Function() request,
+  ) async {
+    final data = await _requestData(request);
+    if (data is! Map) {
+      throw const ApiException('El servidor devolvió una respuesta no válida.');
+    }
+    return data.cast<String, Object?>();
+  }
+
+  Future<List<Object?>> _requestList(
+    Future<Response<Object?>> Function() request,
+  ) async {
+    final data = await _requestData(request);
+    if (data is! List) {
+      throw const ApiException('El servidor devolvió una respuesta no válida.');
+    }
+    return data.cast<Object?>();
+  }
+
+  Future<void> _requestVoid(
+    Future<Response<Object?>> Function() request,
+  ) async {
+    await _requestData(request);
+  }
+
+  Future<Object?> _requestData(
+    Future<Response<Object?>> Function() request,
+  ) async {
+    try {
+      final response = await request();
+      final envelope = response.data;
+      if (envelope is! Map || envelope['success'] != true) {
+        throw const ApiException('El servidor devolvió una respuesta no válida.');
+      }
+      return envelope['data'];
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
   }
 }

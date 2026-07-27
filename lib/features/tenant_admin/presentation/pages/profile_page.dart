@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../shared/widgets/app_badges.dart';
+import '../../../../shared/widgets/app_states.dart';
 import '../../../../shared/widgets/page_header.dart';
 import '../../../session/presentation/controllers/tenant_session_controller.dart';
 
@@ -13,6 +14,19 @@ class ProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<TenantSessionController>().session;
+    if (session == null) {
+      return const OperationalEmptyState(
+        title: 'Sin sesión',
+        message: 'No hay información de perfil disponible.',
+      );
+    }
+    final initials = session.userName
+        .split(' ')
+        .where((part) => part.isNotEmpty)
+        .take(2)
+        .map((part) => part[0])
+        .join()
+        .toUpperCase();
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.xl),
       child: Column(
@@ -20,7 +34,7 @@ class ProfilePage extends StatelessWidget {
         children: [
           const PageHeader(
             title: 'Mi perfil',
-            subtitle: 'Datos de identidad, sesión y acceso al workspace.',
+            subtitle: 'Identidad y contexto validados por el backend.',
           ),
           const SizedBox(height: 20),
           ConstrainedBox(
@@ -34,12 +48,7 @@ class ProfilePage extends StatelessWidget {
                       radius: 38,
                       backgroundColor: AppColors.tenantAccent,
                       child: Text(
-                        session?.userName
-                                .split(' ')
-                                .take(2)
-                                .map((part) => part[0])
-                                .join() ??
-                            'ML',
+                        initials,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 22,
@@ -49,11 +58,11 @@ class ProfilePage extends StatelessWidget {
                     ),
                     const SizedBox(height: 14),
                     Text(
-                      session?.userName ?? 'María López',
+                      session.userName,
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     Text(
-                      session?.userEmail ?? '',
+                      session.userEmail,
                       style: const TextStyle(color: AppColors.mutedForeground),
                     ),
                     const SizedBox(height: 18),
@@ -62,18 +71,20 @@ class ProfilePage extends StatelessWidget {
                       runSpacing: 8,
                       alignment: WrapAlignment.center,
                       children: [
-                        for (final role in session?.roleCodes ?? const [])
+                        for (final role in session.roleCodes)
                           RoleBadge(role: role),
                       ],
                     ),
                     const Divider(height: 34),
-                    _InfoRow('Tenant', session?.tenantName ?? ''),
+                    _InfoRow('Tenant', session.tenantName),
+                    _InfoRow('Identificador', session.tenantSlug),
+                    _InfoRow('Estado del tenant', session.tenantStatus),
                     _InfoRow(
                       'Sucursal activa',
-                      session?.activeBranchName ?? 'Sin seleccionar',
+                      session.activeBranchName ?? 'Sin seleccionar',
                     ),
-                    _InfoRow('Actor', session?.actorType ?? ''),
-                    _InfoRow('Sesión', session?.sessionId ?? ''),
+                    _InfoRow('Tipo de usuario', session.actorType),
+                    _InfoRow('ID de sesión', session.sessionId),
                   ],
                 ),
               ),
@@ -87,6 +98,7 @@ class ProfilePage extends StatelessWidget {
 
 class _InfoRow extends StatelessWidget {
   const _InfoRow(this.label, this.value);
+
   final String label;
   final String value;
 

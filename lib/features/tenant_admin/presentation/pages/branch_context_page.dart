@@ -4,11 +4,10 @@ import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_tokens.dart';
-import '../../../../core/utils/formatters.dart';
+import '../../../../shared/widgets/app_badges.dart';
 import '../../../../shared/widgets/app_states.dart';
 import '../../../../shared/widgets/page_header.dart';
 import '../../../session/presentation/controllers/tenant_session_controller.dart';
-import '../controllers/tenant_admin_controller.dart';
 
 class BranchContextPage extends StatefulWidget {
   const BranchContextPage({super.key});
@@ -19,40 +18,29 @@ class BranchContextPage extends StatefulWidget {
 
 class _BranchContextPageState extends State<BranchContextPage> {
   String _search = '';
-
-  @override
-  void initState() {
-    super.initState();
-    final controller = context.read<TenantAdminController>();
-    if (controller.status == TenantAdminStatus.idle) controller.load();
-  }
+  bool _switching = false;
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<TenantAdminController>();
-    if (controller.status == TenantAdminStatus.loading) {
-      return const AppLoadingState(message: 'Cargando sucursales…');
-    }
-    if (controller.status == TenantAdminStatus.error) {
-      return AppErrorState(
-        message: controller.errorMessage!,
-        onRetry: controller.load,
-      );
-    }
-    final filtered = controller.branches.where((branch) {
-      final query = _search.toLowerCase();
-      return branch.name.toLowerCase().contains(query) ||
-          branch.id.toLowerCase().contains(query);
-    }).toList();
+    final session = context.watch<TenantSessionController>();
+    final query = _search.trim().toLowerCase();
+    final branches = session.branches
+        .where(
+          (branch) =>
+              branch.name.toLowerCase().contains(query) ||
+              branch.code.toLowerCase().contains(query),
+        )
+        .toList(growable: false);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const PageHeader(
+          PageHeader(
             title: 'Contexto de sucursal',
-            subtitle:
-                'Elige la sucursal que controlará inventario, ventas y restaurante.',
+            subtitle: session.canSwitchBranch
+                ? 'Elige una sucursal permitida por tu sesión.'
+                : 'Tu rol solo puede operar en la sucursal activa.',
           ),
           const SizedBox(height: 20),
           ConstrainedBox(
@@ -60,18 +48,16 @@ class _BranchContextPageState extends State<BranchContextPage> {
             child: TextField(
               onChanged: (value) => setState(() => _search = value),
               decoration: const InputDecoration(
-                hintText: 'Buscar por nombre o ID de sucursal…',
+                hintText: 'Buscar por nombre o código…',
                 prefixIcon: Icon(Icons.search),
               ),
             ),
           ),
           const SizedBox(height: 18),
-          if (filtered.isEmpty)
-            OperationalEmptyState(
+          if (branches.isEmpty)
+            const OperationalEmptyState(
               title: 'Sin sucursales',
-              message: 'No hay resultados para “$_search”.',
-              actionLabel: 'Limpiar búsqueda',
-              onAction: () => setState(() => _search = ''),
+              message: 'La sesión no tiene sucursales disponibles.',
             )
           else
             GridView.builder(
@@ -83,24 +69,24 @@ class _BranchContextPageState extends State<BranchContextPage> {
                 mainAxisSpacing: 16,
                 childAspectRatio: 2.15,
               ),
-              itemCount: filtered.length,
+              itemCount: branches.length,
               itemBuilder: (context, index) {
-                final branch = filtered[index];
-                final selected =
-                    context.watch<TenantSessionController>().activeBranchId ==
-                    branch.id;
+                final branch = branches[index];
+                final selected = session.activeBranchId == branch.id;
+                final enabled =
+                    !_switching &&
+                    session.canSwitchBranch &&
+                    branch.isActive &&
+                    !selected;
                 return Card(
                   color: selected
                       ? AppColors.tenantAccent.withValues(alpha: 0.06)
                       : null,
                   child: InkWell(
                     borderRadius: BorderRadius.circular(14),
-                    onTap: () async {
-                      await context
-                          .read<TenantSessionController>()
-                          .switchBranch(branch.id, branch.name);
-                      if (context.mounted) context.go('/app/dashboard');
-                    },
+                    onTap: enabled
+                        ? () => _switchBranch(context, branch.id)
+                        : null,
                     child: Padding(
                       padding: const EdgeInsets.all(18),
                       child: Column(
@@ -116,9 +102,7 @@ class _BranchContextPageState extends State<BranchContextPage> {
                               Expanded(
                                 child: Text(
                                   branch.name,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
+                                  style: Theme.of(context).textTheme.titleMedium,
                                 ),
                               ),
                               if (selected)
@@ -130,16 +114,17 @@ class _BranchContextPageState extends State<BranchContextPage> {
                           ),
                           const Spacer(),
                           Text(
-                            '${branch.id} · ${branch.city}',
+                            branch.code,
                             style: const TextStyle(
                               color: AppColors.mutedForeground,
                             ),
                           ),
-                          Text(branch.address),
-                          const SizedBox(height: 10),
-                          Text(
-                            '${AppFormatters.currency(branch.salesToday)} hoy · ${branch.employees} colaboradores',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          const SizedBox(height: 8),
+                          AppBadge(
+                            label: branch.status,
+                            color: branch.isActive
+                                ? AppColors.success
+                                : AppColors.mutedForeground,
                           ),
                         ],
                       ),
@@ -151,5 +136,24 @@ class _BranchContextPageState extends State<BranchContextPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _switchBranch(BuildContext context, String branchId) async {
+    setState(() => _switching = true);
+    final controller = context.read<TenantSessionController>();
+    final success = await controller.switchBranch(branchId);
+    if (!context.mounted) return;
+    setState(() => _switching = false);
+    if (success) {
+      context.go('/app/dashboard');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            controller.errorMessage ?? 'No fue posible cambiar de sucursal.',
+          ),
+        ),
+      );
+    }
   }
 }

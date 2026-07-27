@@ -65,15 +65,9 @@ class _TenantTopbar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const SizedBox(
-            width: 290,
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Buscar módulos y acciones…',
-                prefixIcon: Icon(Icons.search),
-                isDense: true,
-              ),
-            ),
+          Text(
+            session?.tenantName ?? 'Impulsa Suite',
+            style: Theme.of(context).textTheme.titleMedium,
           ),
           const Spacer(),
           BranchContextBadge(
@@ -82,14 +76,6 @@ class _TenantTopbar extends StatelessWidget {
           const SizedBox(width: 8),
           RoleBadge(role: controller.roleCodes.firstOrNull ?? 'VIEWER'),
           const SizedBox(width: 12),
-          IconButton(
-            tooltip: 'Notificaciones',
-            onPressed: () {},
-            icon: const Badge(
-              smallSize: 7,
-              child: Icon(Icons.notifications_none),
-            ),
-          ),
           PopupMenuButton<String>(
             tooltip: 'Cuenta',
             onSelected: (value) async {
@@ -134,7 +120,7 @@ class _TenantNavigation extends StatelessWidget {
       _NavItem('/app/admin/users', 'Empleados', Icons.people_outline),
       _NavItem('/app/admin/roles', 'Roles', Icons.shield_outlined),
       _NavItem(
-        '/app/admin/multibranch-controller',
+        '/app/admin/multibranch',
         'Multisucursal',
         Icons.hub_outlined,
       ),
@@ -214,7 +200,8 @@ class _TenantNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final session = context.watch<TenantSessionController>().session;
+    final controller = context.watch<TenantSessionController>();
+    final session = controller.session;
     return ColoredBox(
       color: AppColors.tenantSidebar,
       child: SafeArea(
@@ -232,9 +219,12 @@ class _TenantNavigation extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              subtitle: const Text(
-                'Enterprise plan',
-                style: TextStyle(color: Color(0xFF5F8E8A), fontSize: 11),
+              subtitle: Text(
+                session?.tenantStatus ?? '',
+                style: const TextStyle(
+                  color: Color(0xFF5F8E8A),
+                  fontSize: 11,
+                ),
               ),
             ),
             InkWell(
@@ -263,11 +253,12 @@ class _TenantNavigation extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const Icon(
-                      Icons.chevron_right,
-                      color: Color(0xFF5F8E8A),
-                      size: 17,
-                    ),
+                    if (controller.canSwitchBranch)
+                      const Icon(
+                        Icons.chevron_right,
+                        color: Color(0xFF5F8E8A),
+                        size: 17,
+                      ),
                   ],
                 ),
               ),

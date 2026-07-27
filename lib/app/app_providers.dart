@@ -13,7 +13,6 @@ import '../features/restaurant_floor/data/repositories/restaurant_repository.dar
 import '../features/restaurant_floor/presentation/controllers/restaurant_controller.dart';
 import '../features/session/presentation/controllers/tenant_session_controller.dart';
 import '../features/superadmin/presentation/controllers/superadmin_controller.dart';
-import '../features/tenant_admin/data/repositories/tenant_admin_repository.dart';
 import '../features/tenant_admin/presentation/controllers/tenant_admin_controller.dart';
 import '../features/waiter/data/repositories/waiter_repository.dart';
 import '../features/waiter/presentation/controllers/waiter_controller.dart';
@@ -22,11 +21,13 @@ class AppProviders extends StatefulWidget {
   const AppProviders({
     super.key,
     required this.sessionController,
+    required this.tenantAdminController,
     required this.superadminController,
     required this.child,
   });
 
   final TenantSessionController sessionController;
+  final TenantAdminController tenantAdminController;
   final SuperadminController superadminController;
   final Widget child;
 
@@ -35,7 +36,6 @@ class AppProviders extends StatefulWidget {
 }
 
 class _AppProvidersState extends State<AppProviders> {
-  late final TenantAdminController tenantAdmin;
   late final InventoryController inventory;
   late final PurchasingController purchasing;
   late final PosController pos;
@@ -47,7 +47,6 @@ class _AppProvidersState extends State<AppProviders> {
   @override
   void initState() {
     super.initState();
-    tenantAdmin = TenantAdminController(MockTenantAdminRepository());
     inventory = InventoryController(MockInventoryRepository());
     purchasing = PurchasingController(MockPurchasingRepository());
     pos = PosController(MockPosRepository());
@@ -62,6 +61,10 @@ class _AppProvidersState extends State<AppProviders> {
     final branchId = widget.sessionController.activeBranchId;
     if (branchId == _observedBranchId) return;
     _observedBranchId = branchId;
+    widget.tenantAdminController.invalidate();
+    if (widget.sessionController.hasAnyRole(const ['OWNER', 'MANAGER'])) {
+      widget.tenantAdminController.load(force: true);
+    }
     if (branchId == null) return;
     inventory.load(branchId: branchId);
     pos.load(branchId: branchId);
@@ -72,7 +75,6 @@ class _AppProvidersState extends State<AppProviders> {
   @override
   void dispose() {
     widget.sessionController.removeListener(_syncBranch);
-    tenantAdmin.dispose();
     inventory.dispose();
     purchasing.dispose();
     pos.dispose();
@@ -86,7 +88,7 @@ class _AppProvidersState extends State<AppProviders> {
   Widget build(BuildContext context) => MultiProvider(
     providers: [
       ChangeNotifierProvider.value(value: widget.sessionController),
-      ChangeNotifierProvider.value(value: tenantAdmin),
+      ChangeNotifierProvider.value(value: widget.tenantAdminController),
       ChangeNotifierProvider.value(value: inventory),
       ChangeNotifierProvider.value(value: purchasing),
       ChangeNotifierProvider.value(value: pos),

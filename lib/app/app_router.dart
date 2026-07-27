@@ -84,6 +84,9 @@ String? _redirect(
   String location,
 ) {
   if (location == '/tenant/login') return '/tenant-login';
+  if (location == '/app/admin/multibranch-controller') {
+    return '/app/admin/multibranch';
+  }
   if (location == '/superadmin') return '/superadmin/dashboard';
   if (location == '/app') return '/app/dashboard';
   if (location == '/superadmin/login' && superadmin.isAuthenticated) {
@@ -100,10 +103,15 @@ String? _redirect(
   if (!location.startsWith('/app')) return null;
 
   final tenantRedirect = TenantGuard.redirect(session, location);
-  if (tenantRedirect != null && location != '/app/access-denied') {
+  if (tenantRedirect != null &&
+      location != '/app/access-denied' &&
+      location != '/app/tenant-suspended') {
     return tenantRedirect;
   }
-  if (location == '/app/access-denied') return null;
+  if (location == '/app/access-denied' ||
+      location == '/app/tenant-suspended') {
+    return null;
+  }
 
   final requiresBranch =
       location.startsWith('/app/pos') ||
@@ -202,6 +210,10 @@ ShellRoute _tenantAdminRoutes() => ShellRoute(
       builder: (_, _) => const AccessDeniedPage(),
     ),
     GoRoute(
+      path: '/app/tenant-suspended',
+      builder: (_, _) => const TenantSuspendedState(),
+    ),
+    GoRoute(
       path: '/app/empty-state',
       builder: (_, _) => const OperationalEmptyState(
         title: 'Sin información disponible',
@@ -225,7 +237,7 @@ ShellRoute _tenantAdminRoutes() => ShellRoute(
       builder: (_, _) => const TenantRolesPage(),
     ),
     GoRoute(
-      path: '/app/admin/multibranch-controller',
+      path: '/app/admin/multibranch',
       builder: (_, _) => const MultibranchControllerPage(),
     ),
     GoRoute(
