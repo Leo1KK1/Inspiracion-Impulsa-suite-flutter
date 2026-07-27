@@ -1,149 +1,217 @@
+import 'package:dio/dio.dart';
+
+import '../../../../core/network/api_exception.dart';
+import '../../../../core/network/dio_client.dart';
 import '../models/pos_models.dart';
 
 abstract interface class PosRepository {
-  Future<List<PosProduct>> getProducts({String? branchId});
-  Future<List<PosTicket>> getTickets({String? branchId});
+  Future<CashShift> openShift({required double openingAmount, String? notes});
+  Future<CashShift> getActiveShift();
+  Future<List<CashShift>> getShifts();
+  Future<CashShift> closeShift(
+    String shiftId, {
+    required double closingAmount,
+    String? notes,
+  });
+  Future<CashShiftSummary> getShiftSummary(String shiftId);
+  Future<List<PosProduct>> searchProducts(String query);
+  Future<PosProduct> getProduct(String productId);
+  Future<PosSale> createSale(CreatePosSaleRequest request);
+  Future<PosSale> getSale(String saleId);
+  Future<List<PosTicket>> getTickets({String? cashShiftId});
+  Future<PosTicket> getTicket(String ticketId);
+  Future<CardPaymentIntent> createCardIntent({
+    required String saleId,
+    required double amount,
+  });
+  Future<void> confirmCardIntent({
+    required String intentId,
+    required String gatewayRef,
+  });
 }
 
-class MockPosRepository implements PosRepository {
-  static const products = [
-    PosProduct(
-      id: 'p01',
-      name: 'Coca-Cola 600ml',
-      price: 25,
-      category: 'Bebidas',
-      stock: 142,
-      popular: true,
-    ),
-    PosProduct(
-      id: 'p02',
-      name: 'Agua natural 1L',
-      price: 18,
-      category: 'Bebidas',
-      stock: 98,
-    ),
-    PosProduct(
-      id: 'p03',
-      name: 'Cerveza Modelo 355ml',
-      price: 45,
-      category: 'Bebidas',
-      stock: 60,
-      popular: true,
-    ),
-    PosProduct(
-      id: 'p04',
-      name: 'Jugo naranja 500ml',
-      price: 30,
-      category: 'Bebidas',
-      stock: 34,
-    ),
-    PosProduct(
-      id: 'p05',
-      name: 'Café americano',
-      price: 35,
-      category: 'Bebidas',
-      stock: 999,
-    ),
-    PosProduct(
-      id: 'p06',
-      name: 'Tacos de canasta x3',
-      price: 55,
-      category: 'Alimentos',
-      stock: 45,
-      popular: true,
-    ),
-    PosProduct(
-      id: 'p07',
-      name: 'Torta de jamón',
-      price: 70,
-      category: 'Alimentos',
-      stock: 22,
-    ),
-    PosProduct(
-      id: 'p08',
-      name: 'Ensalada César',
-      price: 95,
-      category: 'Alimentos',
-      stock: 18,
-    ),
-    PosProduct(
-      id: 'p09',
-      name: 'Orden de papas',
-      price: 50,
-      category: 'Alimentos',
-      stock: 30,
-      popular: true,
-    ),
-    PosProduct(
-      id: 'p10',
-      name: 'Sandwich club',
-      price: 85,
-      category: 'Alimentos',
-      stock: 14,
-    ),
-    PosProduct(
-      id: 'p11',
-      name: 'Coctel de frutas',
-      price: 40,
-      category: 'Postres',
-      stock: 20,
-    ),
-    PosProduct(
-      id: 'p12',
-      name: 'Flan napolitano',
-      price: 45,
-      category: 'Postres',
-      stock: 12,
-    ),
-  ];
+class HttpPosRepository implements PosRepository {
+  HttpPosRepository(this._client);
+
+  final DioClient _client;
+  static const _base = '/api/v1/tenant/pos';
 
   @override
-  Future<List<PosProduct>> getProducts({String? branchId}) async {
-    await Future<void>.delayed(const Duration(milliseconds: 180));
-    return products;
-  }
+  Future<CashShift> openShift({
+    required double openingAmount,
+    String? notes,
+  }) async => CashShift.fromJson(
+    await _requestMap(
+      () => _client.dio.post<Object?>(
+        '$_base/cash-shifts/open',
+        data: {
+          'openingAmount': openingAmount,
+          if (notes?.trim().isNotEmpty == true) 'notes': notes!.trim(),
+        },
+      ),
+    ),
+  );
 
   @override
-  Future<List<PosTicket>> getTickets({String? branchId}) async {
-    await Future<void>.delayed(const Duration(milliseconds: 160));
-    return [
-      PosTicket(
-        id: 't01',
-        folio: 'T-0041',
-        time: '18:32',
-        status: TicketStatus.completed,
-        method: PaymentMethod.cash,
-        total: 179.80,
-        cashier: 'M. López',
-        lines: [
-          CartLine(product: products[0], quantity: 2),
-          CartLine(product: products[5], quantity: 1),
-          CartLine(product: products[8], quantity: 1),
-        ],
+  Future<CashShift> getActiveShift() async => CashShift.fromJson(
+    await _requestMap(
+      () => _client.dio.get<Object?>('$_base/cash-shifts/active'),
+    ),
+  );
+
+  @override
+  Future<List<CashShift>> getShifts() async => _objects(
+    await _requestList(() => _client.dio.get<Object?>('$_base/cash-shifts')),
+    CashShift.fromJson,
+  );
+
+  @override
+  Future<CashShift> closeShift(
+    String shiftId, {
+    required double closingAmount,
+    String? notes,
+  }) async => CashShift.fromJson(
+    await _requestMap(
+      () => _client.dio.post<Object?>(
+        '$_base/cash-shifts/$shiftId/close',
+        data: {
+          'closingAmount': closingAmount,
+          if (notes?.trim().isNotEmpty == true) 'notes': notes!.trim(),
+        },
       ),
-      PosTicket(
-        id: 't02',
-        folio: 'T-0040',
-        time: '18:15',
-        status: TicketStatus.completed,
-        method: PaymentMethod.card,
-        total: 266.80,
-        cashier: 'M. López',
-        lines: [
-          CartLine(product: products[2], quantity: 4),
-          CartLine(product: products[6], quantity: 1),
-        ],
+    ),
+  );
+
+  @override
+  Future<CashShiftSummary> getShiftSummary(String shiftId) async =>
+      CashShiftSummary.fromJson(
+        await _requestMap(
+          () => _client.dio.get<Object?>('$_base/cash-shifts/$shiftId/summary'),
+        ),
+      );
+
+  @override
+  Future<List<PosProduct>> searchProducts(String query) async => _objects(
+    await _requestList(
+      () => _client.dio.get<Object?>(
+        '$_base/products/search',
+        queryParameters: {'q': query.trim()},
       ),
-      PosTicket(
-        id: 't03',
-        folio: 'T-0039',
-        time: '17:58',
-        status: TicketStatus.cancelled,
-        method: PaymentMethod.cash,
-        total: 110.20,
-        cashier: 'M. López',
-        lines: [CartLine(product: products[9], quantity: 1)],
+    ),
+    PosProduct.fromJson,
+  );
+
+  @override
+  Future<PosProduct> getProduct(String productId) async => PosProduct.fromJson(
+    await _requestMap(
+      () => _client.dio.get<Object?>('$_base/products/$productId'),
+    ),
+  );
+
+  @override
+  Future<PosSale> createSale(CreatePosSaleRequest request) async =>
+      PosSale.fromJson(
+        await _requestMap(
+          () =>
+              _client.dio.post<Object?>('$_base/sales', data: request.toJson()),
+        ),
+      );
+
+  @override
+  Future<PosSale> getSale(String saleId) async => PosSale.fromJson(
+    await _requestMap(() => _client.dio.get<Object?>('$_base/sales/$saleId')),
+  );
+
+  @override
+  Future<List<PosTicket>> getTickets({String? cashShiftId}) async => _objects(
+    await _requestList(
+      () => _client.dio.get<Object?>(
+        '$_base/tickets',
+        queryParameters: {
+          if (cashShiftId?.isNotEmpty == true) 'cashShiftId': cashShiftId,
+        },
       ),
-    ];
+    ),
+    PosSale.fromJson,
+  );
+
+  @override
+  Future<PosTicket> getTicket(String ticketId) async => PosSale.fromJson(
+    await _requestMap(
+      () => _client.dio.get<Object?>('$_base/tickets/$ticketId'),
+    ),
+  );
+
+  @override
+  Future<CardPaymentIntent> createCardIntent({
+    required String saleId,
+    required double amount,
+  }) async => CardPaymentIntent.fromJson(
+    await _requestMap(
+      () => _client.dio.post<Object?>(
+        '$_base/payments/card-intents',
+        data: {'saleId': saleId, 'amount': amount},
+      ),
+    ),
+  );
+
+  @override
+  Future<void> confirmCardIntent({
+    required String intentId,
+    required String gatewayRef,
+  }) => _requestVoid(
+    () => _client.dio.post<Object?>(
+      '$_base/payments/card-intents/$intentId/confirm',
+      data: {'gatewayRef': gatewayRef},
+    ),
+  );
+
+  Future<Map<String, Object?>> _requestMap(
+    Future<Response<Object?>> Function() request,
+  ) async {
+    final data = await _requestData(request);
+    if (data is! Map) throw _invalidResponse;
+    return data.cast<String, Object?>();
   }
+
+  Future<List<Object?>> _requestList(
+    Future<Response<Object?>> Function() request,
+  ) async {
+    final data = await _requestData(request);
+    if (data is! List) throw _invalidResponse;
+    return data.cast<Object?>();
+  }
+
+  Future<void> _requestVoid(
+    Future<Response<Object?>> Function() request,
+  ) async {
+    await _requestData(request);
+  }
+
+  Future<Object?> _requestData(
+    Future<Response<Object?>> Function() request,
+  ) async {
+    try {
+      final response = await request();
+      final envelope = response.data;
+      if (envelope is! Map || envelope['success'] != true) {
+        throw _invalidResponse;
+      }
+      return envelope['data'];
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  static List<T> _objects<T>(
+    List<Object?> values,
+    T Function(Map<String, Object?> json) factory,
+  ) => values
+      .whereType<Map>()
+      .map((value) => factory(value.cast<String, Object?>()))
+      .toList(growable: false);
+
+  static const _invalidResponse = ApiException(
+    'El servidor devolvió una respuesta no válida.',
+  );
 }

@@ -21,7 +21,7 @@ class _PosPageState extends State<PosPage> {
   void initState() {
     super.initState();
     final controller = context.read<PosController>();
-    if (controller.products.isEmpty) controller.load();
+    if (controller.status == PosStatus.idle) controller.load();
   }
 
   @override
@@ -30,31 +30,82 @@ class _PosPageState extends State<PosPage> {
     if (pos.loading) {
       return const AppLoadingState(message: 'Preparando punto de venta…');
     }
+    if (pos.status == PosStatus.error && pos.activeShift == null) {
+      return AppErrorState(
+        message: pos.errorMessage ?? 'No fue posible abrir el POS.',
+        onRetry: () => pos.load(force: true),
+      );
+    }
+    if (!pos.shiftOpen) {
+      return OperationalEmptyState(
+        title: 'Caja cerrada',
+        message:
+            'Abre un turno en la sucursal activa antes de registrar ventas.',
+        actionLabel: 'Abrir turno',
+        onAction: () => context.go('/app/pos/shifts/open'),
+      );
+    }
+
     final compact = MediaQuery.sizeOf(context).width < 980;
     final catalog = _Catalog(pos: pos);
     final cart = _CartPanel(pos: pos);
-    return compact
-        ? Column(
-            children: [
-              Expanded(child: catalog),
-              Material(
-                elevation: 12,
-                child: ExpansionTile(
-                  initiallyExpanded: pos.cart.isNotEmpty,
-                  title: Text(
-                    'Venta actual · ${pos.cart.length} partidas · ${AppFormatters.currency(pos.total)}',
-                  ),
-                  children: [SizedBox(height: 350, child: cart)],
-                ),
+    return Column(
+      children: [
+        if (pos.errorMessage != null)
+          MaterialBanner(
+            content: Text(pos.errorMessage!),
+            leading: const Icon(
+              Icons.warning_amber_rounded,
+              color: AppColors.warning,
+            ),
+            actions: [
+              TextButton(
+                onPressed: pos.clearError,
+                child: const Text('Cerrar'),
               ),
             ],
-          )
-        : Row(
-            children: [
-              Expanded(child: catalog),
-              SizedBox(width: 360, child: cart),
+          ),
+        if (pos.hasPendingPayment)
+          MaterialBanner(
+            content: Text(
+              'La venta ${pos.pendingSale?.folio ?? ''} tiene un pago con '
+              'tarjeta pendiente. Debes resolverlo antes de iniciar otra venta.',
+            ),
+            leading: const Icon(Icons.schedule, color: AppColors.warning),
+            actions: [
+              FilledButton.tonal(
+                onPressed: () => context.go('/app/pos/checkout'),
+                child: const Text('Reanudar pago'),
+              ),
             ],
-          );
+          ),
+        Expanded(
+          child: compact
+              ? Column(
+                  children: [
+                    Expanded(child: catalog),
+                    Material(
+                      elevation: 12,
+                      child: ExpansionTile(
+                        initiallyExpanded: pos.cart.isNotEmpty,
+                        title: Text(
+                          'Venta actual · ${pos.cart.length} partidas · '
+                          '${AppFormatters.currency(pos.total)}',
+                        ),
+                        children: [SizedBox(height: 350, child: cart)],
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: catalog),
+                    SizedBox(width: 380, child: cart),
+                  ],
+                ),
+        ),
+      ],
+    );
   }
 }
 
@@ -69,106 +120,134 @@ class _Catalog extends StatelessWidget {
       children: [
         TextField(
           onChanged: pos.setQuery,
+          onSubmitted: pos.searchNow,
+          autofocus: true,
           decoration: const InputDecoration(
-            hintText: 'Buscar producto por nombre…',
+            hintText: 'Nombre, SKU o código de barras…',
             prefixIcon: Icon(Icons.search),
+            helperText:
+                'La búsqueda consulta el catálogo de la sucursal activa.',
           ),
         ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 42,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              for (final category in [
-                'Todos',
-                'Bebidas',
-                'Alimentos',
-                'Postres',
-                'Varios',
-              ])
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(category),
-                    selected: pos.category == category,
-                    onSelected: (_) => pos.setCategory(category),
+        if (pos.searchingProducts) const LinearProgressIndicator(minHeight: 2),
+        if (pos.products.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 42,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (final category in pos.categories)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(category),
+                      selected: pos.category == category,
+                      onSelected: (_) => pos.setCategory(category),
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
+        ],
         const SizedBox(height: 12),
         Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final columns = (constraints.maxWidth / 185).floor().clamp(2, 5);
-              return GridView.builder(
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: columns,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 1.05,
-                ),
-                itemCount: pos.filteredProducts.length,
-                itemBuilder: (context, index) {
-                  final product = pos.filteredProducts[index];
-                  return Card(
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(AppRadii.lg),
-                      onTap: product.stock == 0 ? null : () => pos.add(product),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                CircleAvatar(
-                                  backgroundColor: AppColors.primary.withValues(
-                                    alpha: 0.1,
-                                  ),
-                                  child: const Icon(Icons.fastfood_outlined),
-                                ),
-                                const Spacer(),
-                                if (product.popular)
-                                  const AppBadge(
-                                    label: 'POPULAR',
-                                    color: AppColors.warning,
-                                  ),
-                              ],
-                            ),
-                            const Spacer(),
-                            Text(
-                              product.name,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Text(
-                              '${product.stock} disponibles',
-                              style: const TextStyle(
-                                color: AppColors.mutedForeground,
-                                fontSize: 11,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              AppFormatters.currency(product.price),
-                              style: Theme.of(context).textTheme.titleLarge
-                                  ?.copyWith(color: AppColors.primary),
-                            ),
-                          ],
-                        ),
+          child: pos.query.trim().isEmpty
+              ? const OperationalEmptyState(
+                  title: 'Busca un producto',
+                  message:
+                      'Escribe un nombre, SKU o escanea un código de barras.',
+                )
+              : !pos.searchingProducts && pos.filteredProducts.isEmpty
+              ? const OperationalEmptyState(
+                  title: 'Sin productos disponibles',
+                  message:
+                      'No hay coincidencias activas con existencia en esta '
+                      'sucursal.',
+                )
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final columns = (constraints.maxWidth / 185).floor().clamp(
+                      2,
+                      5,
+                    );
+                    return GridView.builder(
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        childAspectRatio: 1.02,
                       ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
+                      itemCount: pos.filteredProducts.length,
+                      itemBuilder: (context, index) {
+                        final product = pos.filteredProducts[index];
+                        return Card(
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(AppRadii.lg),
+                            onTap:
+                                product.availableStock <= 0 ||
+                                    pos.productActionBusy ||
+                                    pos.hasPendingPayment
+                                ? null
+                                : () => pos.add(product),
+                            child: Padding(
+                              padding: const EdgeInsets.all(14),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      CircleAvatar(
+                                        backgroundColor: AppColors.primary
+                                            .withValues(alpha: 0.1),
+                                        child: const Icon(
+                                          Icons.inventory_2_outlined,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      if (product.isLowStock)
+                                        const AppBadge(
+                                          label: 'STOCK BAJO',
+                                          color: AppColors.warning,
+                                        ),
+                                    ],
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    product.name,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${product.availableStock} '
+                                    '${product.unitName} disponibles',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: AppColors.mutedForeground,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    AppFormatters.currency(product.salePrice),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge
+                                        ?.copyWith(color: AppColors.primary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
         ),
       ],
     ),
@@ -223,7 +302,7 @@ class _CartPanel extends StatelessWidget {
                                 ),
                               ),
                               Text(
-                                AppFormatters.currency(line.product.price),
+                                AppFormatters.currency(line.product.salePrice),
                                 style: const TextStyle(
                                   color: AppColors.mutedForeground,
                                 ),
@@ -232,7 +311,9 @@ class _CartPanel extends StatelessWidget {
                           ),
                         ),
                         IconButton(
-                          onPressed: () => pos.changeQuantity(line.product, -1),
+                          onPressed: pos.hasPendingPayment
+                              ? null
+                              : () => pos.changeQuantity(line.product, -1),
                           icon: const Icon(Icons.remove_circle_outline),
                         ),
                         Text(
@@ -240,7 +321,11 @@ class _CartPanel extends StatelessWidget {
                           style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                         IconButton(
-                          onPressed: () => pos.changeQuantity(line.product, 1),
+                          onPressed:
+                              pos.hasPendingPayment ||
+                                  line.quantity >= line.product.availableStock
+                              ? null
+                              : () => pos.changeQuantity(line.product, 1),
                           icon: const Icon(Icons.add_circle_outline),
                         ),
                       ],
@@ -254,14 +339,17 @@ class _CartPanel extends StatelessWidget {
           child: Column(
             children: [
               _TotalLine('Subtotal', pos.subtotal),
-              _TotalLine('IVA 16%', pos.tax),
+              if (pos.discount > 0) _TotalLine('Descuentos', -pos.discount),
               const Divider(),
               _TotalLine('Total', pos.total, emphasized: true),
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: pos.cart.isEmpty
+                  onPressed:
+                      pos.cart.isEmpty ||
+                          pos.hasPendingPayment ||
+                          !pos.shiftOpen
                       ? null
                       : () => context.go('/app/pos/checkout'),
                   icon: const Icon(Icons.credit_card),

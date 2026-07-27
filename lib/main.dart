@@ -6,6 +6,8 @@ import 'core/config/app_config.dart';
 import 'core/network/dio_client.dart';
 import 'features/inventory/data/repositories/inventory_repository.dart';
 import 'features/inventory/presentation/controllers/inventory_controller.dart';
+import 'features/pos/data/repositories/pos_repository.dart';
+import 'features/pos/presentation/controllers/pos_controller.dart';
 import 'features/purchasing/data/repositories/purchasing_repository.dart';
 import 'features/purchasing/presentation/controllers/purchasing_controller.dart';
 import 'features/session/data/repositories/session_repository.dart';
@@ -35,6 +37,11 @@ Future<void> main() async {
     HttpPurchasingRepository(tenantClient),
     initialBranchId: session.activeBranchId,
   );
+  final pos = PosController(
+    HttpPosRepository(tenantClient),
+    initialBranchId: session.activeBranchId,
+    canManageShifts: session.hasAnyRole(const ['OWNER', 'MANAGER']),
+  );
   final superadmin = SuperadminController(
     HttpSuperadminRepository(
       DioClient(baseUrl: AppConfig.apiBaseUrl),
@@ -48,6 +55,7 @@ Future<void> main() async {
       tenantAdminController: tenantAdmin,
       inventoryController: inventory,
       purchasingController: purchasing,
+      posController: pos,
       superadminController: superadmin,
     ),
   );
