@@ -1,271 +1,306 @@
+import 'package:dio/dio.dart';
+
+import '../../../../core/network/api_exception.dart';
+import '../../../../core/network/dio_client.dart';
 import '../models/finance_models.dart';
 
-abstract interface class FinanceRepository {
-  Future<List<Expense>> getExpenses();
-  Future<List<ExpenseCategory>> getCategories();
-  Future<List<BranchFinancialHealth>> getFinancialHealth();
+class ExpenseQuery {
+  const ExpenseQuery({
+    this.from,
+    this.to,
+    this.categoryId,
+    this.branchId,
+    this.status,
+    this.limit = 200,
+    this.offset = 0,
+  });
+
+  final DateTime? from;
+  final DateTime? to;
+  final String? categoryId;
+  final String? branchId;
+  final ExpenseStatus? status;
+  final int limit;
+  final int offset;
+
+  Map<String, Object?> toQuery() => {
+    if (from != null) 'from': _dateOnly(from!),
+    if (to != null) 'to': _dateOnly(to!),
+    if (categoryId?.isNotEmpty == true) 'categoryId': categoryId,
+    if (branchId?.isNotEmpty == true) 'branchId': branchId,
+    if (status != null) 'status': status!.apiValue,
+    'limit': limit,
+    'offset': offset,
+  };
 }
 
-class MockFinanceRepository implements FinanceRepository {
-  @override
-  Future<List<Expense>> getExpenses() async {
-    await Future<void>.delayed(const Duration(milliseconds: 260));
-    return [
-      _expense(
-        'e01',
-        'GTO-0041',
-        'Renta local CDMX-01 — Oct',
-        'Renta',
-        'CDMX-01',
-        85000,
-        13600,
-        ExpenseStatus.approved,
-        true,
-      ),
-      _expense(
-        'e02',
-        'GTO-0042',
-        'Nómina quincena 1 — Oct',
-        'Nómina',
-        'CDMX-01',
-        62000,
-        0,
-        ExpenseStatus.approved,
-        true,
-      ),
-      _expense(
-        'e03',
-        'GTO-0043',
-        'Servicio de luz — Sep',
-        'Servicios',
-        'CDMX-02',
-        12400,
-        1984,
-        ExpenseStatus.approved,
-        true,
-      ),
-      _expense(
-        'e04',
-        'GTO-0044',
-        'Mantenimiento equipo cocina',
-        'Mantenimiento',
-        'GDL-01',
-        8500,
-        1360,
-        ExpenseStatus.pending,
-        false,
-      ),
-      _expense(
-        'e05',
-        'GTO-0045',
-        'Publicidad redes sociales — Sep',
-        'Marketing',
-        'CDMX-01',
-        15000,
-        2400,
-        ExpenseStatus.approved,
-        true,
-      ),
-      _expense(
-        'e06',
-        'GTO-0046',
-        'Gas — instalación GDL',
-        'Servicios',
-        'GDL-01',
-        3200,
-        512,
-        ExpenseStatus.rejected,
-        false,
-      ),
-      _expense(
-        'e07',
-        'GTO-0047',
-        'Uniformes personal temporada',
-        'Uniformes',
-        'MTY-01',
-        18400,
-        2944,
-        ExpenseStatus.pending,
-        false,
-      ),
-      _expense(
-        'e08',
-        'GTO-0048',
-        'Software suscripción — Contpaq',
-        'Tecnología',
-        'CDMX-01',
-        4800,
-        768,
-        ExpenseStatus.approved,
-        true,
-      ),
-    ];
-  }
+abstract interface class FinanceRepository {
+  Future<List<ExpenseCategory>> getCategories({CancelToken? cancelToken});
+  Future<ExpenseCategory> createCategory(ExpenseCategoryMutation mutation);
+  Future<ExpenseCategory> updateCategory(
+    String categoryId,
+    ExpenseCategoryMutation mutation,
+  );
+  Future<List<Expense>> getExpenses(
+    ExpenseQuery query, {
+    CancelToken? cancelToken,
+  });
+  Future<Expense> getExpense(String expenseId);
+  Future<Expense> createExpense(
+    ExpenseMutation mutation, {
+    required bool includeBranch,
+  });
+  Future<Expense> updateExpense(
+    String expenseId,
+    ExpenseMutation mutation, {
+    required bool includeBranch,
+  });
+  Future<Expense> cancelExpense(String expenseId);
+  Future<FinancialSummary> getSummary({
+    required DateTime from,
+    required DateTime to,
+    String? branchId,
+    CancelToken? cancelToken,
+  });
+  Future<SalesVsExpensesReport> getSalesVsExpenses({
+    required DateTime from,
+    required DateTime to,
+    String? branchId,
+    CancelToken? cancelToken,
+  });
+  Future<NetProfitReport> getNetProfit({
+    required DateTime from,
+    required DateTime to,
+    String? branchId,
+    CancelToken? cancelToken,
+  });
+  Future<BranchComparisonReport> getBranchComparison({
+    required DateTime from,
+    required DateTime to,
+    CancelToken? cancelToken,
+  });
+}
 
-  Expense _expense(
-    String id,
-    String folio,
-    String concept,
-    String category,
-    String branch,
-    double amount,
-    double tax,
-    ExpenseStatus status,
-    bool receipt,
-  ) {
-    return Expense(
-      id: id,
-      folio: folio,
-      concept: concept,
-      category: category,
-      branchId: branch,
-      date: DateTime(2025, 9, 30),
-      amount: amount,
-      tax: tax,
-      method: ExpensePaymentMethod.transfer,
-      status: status,
-      notes: 'Registro operativo migrado desde el mock React.',
-      createdBy: 'M. López',
-      hasReceipt: receipt,
-    );
-  }
+class HttpFinanceRepository implements FinanceRepository {
+  HttpFinanceRepository(this._client);
+
+  final DioClient _client;
+  static const _finance = '/api/v1/tenant/finance';
+  static const _analytics = '/api/v1/tenant/analytics/dashboard';
 
   @override
-  Future<List<ExpenseCategory>> getCategories() async {
-    await Future<void>.delayed(const Duration(milliseconds: 180));
-    return const [
-      ExpenseCategory(
-        id: 'cat-01',
-        name: 'Renta',
-        description: 'Arrendamiento de locales comerciales',
-        budgetMonthly: 340000,
-        spentThisMonth: 340000,
-        active: true,
-        requiresReceipt: true,
-        requiresApproval: false,
-        colorValue: 0xFF2563EB,
+  Future<List<ExpenseCategory>> getCategories({
+    CancelToken? cancelToken,
+  }) async => _objects(
+    await _requestList(
+      () => _client.dio.get<Object?>(
+        '$_finance/expense-categories',
+        cancelToken: cancelToken,
       ),
-      ExpenseCategory(
-        id: 'cat-02',
-        name: 'Nómina',
-        description: 'Sueldos, salarios y prestaciones',
-        budgetMonthly: 520000,
-        spentThisMonth: 310000,
-        active: true,
-        requiresReceipt: true,
-        requiresApproval: false,
-        colorValue: 0xFF7C3AED,
-      ),
-      ExpenseCategory(
-        id: 'cat-03',
-        name: 'Servicios',
-        description: 'Luz, agua, gas, internet y telefonía',
-        budgetMonthly: 85000,
-        spentThisMonth: 62400,
-        active: true,
-        requiresReceipt: true,
-        requiresApproval: false,
-        colorValue: 0xFF0D9488,
-      ),
-      ExpenseCategory(
-        id: 'cat-04',
-        name: 'Mantenimiento',
-        description: 'Reparaciones preventivas y correctivas',
-        budgetMonthly: 40000,
-        spentThisMonth: 8500,
-        active: true,
-        requiresReceipt: false,
-        requiresApproval: true,
-        colorValue: 0xFFF97316,
-      ),
-      ExpenseCategory(
-        id: 'cat-05',
-        name: 'Marketing',
-        description: 'Publicidad y material promocional',
-        budgetMonthly: 60000,
-        spentThisMonth: 15000,
-        active: true,
-        requiresReceipt: true,
-        requiresApproval: true,
-        colorValue: 0xFFEC4899,
-      ),
-      ExpenseCategory(
-        id: 'cat-06',
-        name: 'Uniformes',
-        description: 'Ropa de trabajo del personal',
-        budgetMonthly: 20000,
-        spentThisMonth: 18400,
-        active: true,
-        requiresReceipt: false,
-        requiresApproval: true,
-        colorValue: 0xFF6B7280,
-      ),
-      ExpenseCategory(
-        id: 'cat-08',
-        name: 'Seguros',
-        description: 'Pólizas para locales y equipo',
-        budgetMonthly: 30000,
-        spentThisMonth: 0,
-        active: false,
-        requiresReceipt: true,
-        requiresApproval: true,
-        colorValue: 0xFF15803D,
-      ),
-    ];
-  }
+    ),
+    ExpenseCategory.fromJson,
+  );
 
   @override
-  Future<List<BranchFinancialHealth>> getFinancialHealth() async {
-    await Future<void>.delayed(const Duration(milliseconds: 180));
-    return const [
-      BranchFinancialHealth(
-        id: 'CDMX-01',
-        name: 'CDMX Centro',
-        score: 84,
-        status: FinancialHealthStatus.healthy,
-        revenue: 724000,
-        expenses: 402000,
-        margin: 44.4,
-        salesTrend: 8.1,
-        expenseTrend: 5.2,
-        stability: 92,
+  Future<ExpenseCategory> createCategory(
+    ExpenseCategoryMutation mutation,
+  ) async => ExpenseCategory.fromJson(
+    await _requestMap(
+      () => _client.dio.post<Object?>(
+        '$_finance/expense-categories',
+        data: mutation.toCreateJson(),
       ),
-      BranchFinancialHealth(
-        id: 'CDMX-02',
-        name: 'CDMX Norte',
-        score: 71,
-        status: FinancialHealthStatus.healthy,
-        revenue: 548000,
-        expenses: 341000,
-        margin: 37.8,
-        salesTrend: 3.2,
-        expenseTrend: 4.8,
-        stability: 78,
+    ),
+  );
+
+  @override
+  Future<ExpenseCategory> updateCategory(
+    String categoryId,
+    ExpenseCategoryMutation mutation,
+  ) async => ExpenseCategory.fromJson(
+    await _requestMap(
+      () => _client.dio.patch<Object?>(
+        '$_finance/expense-categories/$categoryId',
+        data: mutation.toUpdateJson(),
       ),
-      BranchFinancialHealth(
-        id: 'GDL-01',
-        name: 'Guadalajara',
-        score: 58,
-        status: FinancialHealthStatus.atRisk,
-        revenue: 389000,
-        expenses: 264000,
-        margin: 32.1,
-        salesTrend: -2.4,
-        expenseTrend: 6.3,
-        stability: 61,
+    ),
+  );
+
+  @override
+  Future<List<Expense>> getExpenses(
+    ExpenseQuery query, {
+    CancelToken? cancelToken,
+  }) async => _objects(
+    await _requestList(
+      () => _client.dio.get<Object?>(
+        '$_finance/expenses',
+        queryParameters: query.toQuery(),
+        cancelToken: cancelToken,
       ),
-      BranchFinancialHealth(
-        id: 'MTY-01',
-        name: 'Monterrey',
-        score: 39,
-        status: FinancialHealthStatus.critical,
-        revenue: 302000,
-        expenses: 228000,
-        margin: 24.5,
-        salesTrend: -5.8,
-        expenseTrend: 9.1,
-        stability: 44,
+    ),
+    Expense.fromJson,
+  );
+
+  @override
+  Future<Expense> getExpense(String expenseId) async => Expense.fromJson(
+    await _requestMap(
+      () => _client.dio.get<Object?>('$_finance/expenses/$expenseId'),
+    ),
+  );
+
+  @override
+  Future<Expense> createExpense(
+    ExpenseMutation mutation, {
+    required bool includeBranch,
+  }) async => Expense.fromJson(
+    await _requestMap(
+      () => _client.dio.post<Object?>(
+        '$_finance/expenses',
+        data: mutation.toJson(includeBranch: includeBranch),
       ),
-    ];
+    ),
+  );
+
+  @override
+  Future<Expense> updateExpense(
+    String expenseId,
+    ExpenseMutation mutation, {
+    required bool includeBranch,
+  }) async => Expense.fromJson(
+    await _requestMap(
+      () => _client.dio.patch<Object?>(
+        '$_finance/expenses/$expenseId',
+        data: mutation.toJson(includeBranch: includeBranch),
+      ),
+    ),
+  );
+
+  @override
+  Future<Expense> cancelExpense(String expenseId) async => Expense.fromJson(
+    await _requestMap(
+      () => _client.dio.delete<Object?>('$_finance/expenses/$expenseId'),
+    ),
+  );
+
+  @override
+  Future<FinancialSummary> getSummary({
+    required DateTime from,
+    required DateTime to,
+    String? branchId,
+    CancelToken? cancelToken,
+  }) async => FinancialSummary.fromJson(
+    await _requestMap(
+      () => _client.dio.get<Object?>(
+        '$_analytics/summary',
+        queryParameters: _analyticsQuery(from, to, branchId),
+        cancelToken: cancelToken,
+      ),
+    ),
+  );
+
+  @override
+  Future<SalesVsExpensesReport> getSalesVsExpenses({
+    required DateTime from,
+    required DateTime to,
+    String? branchId,
+    CancelToken? cancelToken,
+  }) async => SalesVsExpensesReport.fromJson(
+    await _requestMap(
+      () => _client.dio.get<Object?>(
+        '$_analytics/sales-vs-expenses',
+        queryParameters: _analyticsQuery(from, to, branchId),
+        cancelToken: cancelToken,
+      ),
+    ),
+  );
+
+  @override
+  Future<NetProfitReport> getNetProfit({
+    required DateTime from,
+    required DateTime to,
+    String? branchId,
+    CancelToken? cancelToken,
+  }) async => NetProfitReport.fromJson(
+    await _requestMap(
+      () => _client.dio.get<Object?>(
+        '$_analytics/net-profit',
+        queryParameters: _analyticsQuery(from, to, branchId),
+        cancelToken: cancelToken,
+      ),
+    ),
+  );
+
+  @override
+  Future<BranchComparisonReport> getBranchComparison({
+    required DateTime from,
+    required DateTime to,
+    CancelToken? cancelToken,
+  }) async => BranchComparisonReport.fromJson(
+    await _requestMap(
+      () => _client.dio.get<Object?>(
+        '$_analytics/branch-comparison',
+        queryParameters: {'from': _dateOnly(from), 'to': _dateOnly(to)},
+        cancelToken: cancelToken,
+      ),
+    ),
+  );
+
+  Map<String, Object?> _analyticsQuery(
+    DateTime from,
+    DateTime to,
+    String? branchId,
+  ) => {
+    'from': _dateOnly(from),
+    'to': _dateOnly(to),
+    if (branchId?.isNotEmpty == true) 'branchId': branchId,
+  };
+
+  Future<Map<String, Object?>> _requestMap(
+    Future<Response<Object?>> Function() request,
+  ) async {
+    final data = await _requestData(request);
+    if (data is! Map) throw _invalidResponse;
+    return data.cast<String, Object?>();
   }
+
+  Future<List<Object?>> _requestList(
+    Future<Response<Object?>> Function() request,
+  ) async {
+    final data = await _requestData(request);
+    if (data is! List) throw _invalidResponse;
+    return data.cast<Object?>();
+  }
+
+  Future<Object?> _requestData(
+    Future<Response<Object?>> Function() request,
+  ) async {
+    try {
+      final response = await request();
+      final envelope = response.data;
+      if (envelope is! Map || envelope['success'] != true) {
+        throw _invalidResponse;
+      }
+      return envelope['data'];
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  static List<T> _objects<T>(
+    List<Object?> values,
+    T Function(Map<String, Object?> json) factory,
+  ) => values
+      .whereType<Map>()
+      .map((value) => factory(value.cast<String, Object?>()))
+      .toList(growable: false);
+
+  static const _invalidResponse = ApiException(
+    'El servidor devolvió una respuesta no válida.',
+  );
+}
+
+String _dateOnly(DateTime value) {
+  final month = value.month.toString().padLeft(2, '0');
+  final day = value.day.toString().padLeft(2, '0');
+  return '${value.year}-$month-$day';
 }

@@ -25,10 +25,12 @@ flutter run -d edge --dart-define=API_BASE_URL=http://localhost:3000
   órdenes de compra reales.
 - HU04 consume turnos de caja, búsqueda POS, ventas, tickets e intents de
   pago reales bajo `/api/v1/tenant/pos`.
+- HU05 consume categorías, gastos operativos y los cuatro dashboards reales
+  bajo `/api/v1/tenant/finance` y `/api/v1/tenant/analytics`.
 
 Cada contexto conserva su propia sesión. El frontend no incluye credenciales
-tenant ni datos simulados para HU01-HU04; deben usarse cuentas existentes en el
-backend local. HU05 y posteriores continúan migrándose por fases.
+tenant ni datos simulados para HU01-HU05; deben usarse cuentas existentes en el
+backend local. HU06 y posteriores continúan migrándose por fases.
 
 ## Calidad
 

@@ -11,9 +11,7 @@ class ExpenseStatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, color) = switch (status) {
-      ExpenseStatus.approved => ('APROBADO', AppColors.success),
-      ExpenseStatus.pending => ('PENDIENTE', AppColors.warning),
-      ExpenseStatus.rejected => ('RECHAZADO', AppColors.destructive),
+      ExpenseStatus.recorded => ('REGISTRADO', AppColors.success),
       ExpenseStatus.cancelled => ('CANCELADO', AppColors.mutedForeground),
     };
     return AppBadge(label: label, color: color);

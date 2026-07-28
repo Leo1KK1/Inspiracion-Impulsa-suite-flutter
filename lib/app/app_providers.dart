@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../features/finance/data/repositories/finance_repository.dart';
 import '../features/finance/presentation/controllers/finance_controller.dart';
 import '../features/inventory/presentation/controllers/inventory_controller.dart';
 import '../features/pos/presentation/controllers/pos_controller.dart';
@@ -22,6 +21,7 @@ class AppProviders extends StatefulWidget {
     required this.inventoryController,
     required this.purchasingController,
     required this.posController,
+    required this.financeController,
     required this.superadminController,
     required this.child,
   });
@@ -31,6 +31,7 @@ class AppProviders extends StatefulWidget {
   final InventoryController inventoryController;
   final PurchasingController purchasingController;
   final PosController posController;
+  final FinanceController financeController;
   final SuperadminController superadminController;
   final Widget child;
 
@@ -39,7 +40,6 @@ class AppProviders extends StatefulWidget {
 }
 
 class _AppProvidersState extends State<AppProviders> {
-  late final FinanceController finance;
   late final RestaurantController restaurant;
   late final WaiterController waiter;
   String? _observedBranchId;
@@ -47,7 +47,6 @@ class _AppProvidersState extends State<AppProviders> {
   @override
   void initState() {
     super.initState();
-    finance = FinanceController(MockFinanceRepository());
     restaurant = RestaurantController(MockRestaurantRepository());
     waiter = WaiterController(MockWaiterRepository());
     _observedBranchId = widget.sessionController.activeBranchId;
@@ -60,6 +59,7 @@ class _AppProvidersState extends State<AppProviders> {
     _observedBranchId = branchId;
     widget.tenantAdminController.invalidate();
     widget.posController.setBranch(branchId);
+    widget.financeController.onSessionBranchChanged(branchId);
     if (widget.sessionController.hasAnyRole(const ['OWNER', 'MANAGER'])) {
       widget.tenantAdminController.load(force: true);
       if (branchId != null) {
@@ -79,6 +79,9 @@ class _AppProvidersState extends State<AppProviders> {
     ])) {
       widget.posController.load(branchId: branchId, force: true);
     }
+    if (widget.sessionController.hasAnyRole(const ['OWNER', 'MANAGER'])) {
+      widget.financeController.load(force: true);
+    }
     restaurant.load(branchId: branchId);
     waiter.load(branchId: branchId);
   }
@@ -86,7 +89,6 @@ class _AppProvidersState extends State<AppProviders> {
   @override
   void dispose() {
     widget.sessionController.removeListener(_syncBranch);
-    finance.dispose();
     restaurant.dispose();
     waiter.dispose();
     super.dispose();
@@ -100,7 +102,7 @@ class _AppProvidersState extends State<AppProviders> {
       ChangeNotifierProvider.value(value: widget.inventoryController),
       ChangeNotifierProvider.value(value: widget.purchasingController),
       ChangeNotifierProvider.value(value: widget.posController),
-      ChangeNotifierProvider.value(value: finance),
+      ChangeNotifierProvider.value(value: widget.financeController),
       ChangeNotifierProvider.value(value: restaurant),
       ChangeNotifierProvider.value(value: waiter),
       ChangeNotifierProvider.value(value: widget.superadminController),

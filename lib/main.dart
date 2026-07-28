@@ -4,6 +4,8 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'app/app.dart';
 import 'core/config/app_config.dart';
 import 'core/network/dio_client.dart';
+import 'features/finance/data/repositories/finance_repository.dart';
+import 'features/finance/presentation/controllers/finance_controller.dart';
 import 'features/inventory/data/repositories/inventory_repository.dart';
 import 'features/inventory/presentation/controllers/inventory_controller.dart';
 import 'features/pos/data/repositories/pos_repository.dart';
@@ -42,6 +44,11 @@ Future<void> main() async {
     initialBranchId: session.activeBranchId,
     canManageShifts: session.hasAnyRole(const ['OWNER', 'MANAGER']),
   );
+  final finance = FinanceController(
+    HttpFinanceRepository(tenantClient),
+    isOwner: session.isOwner,
+    initialBranchId: session.activeBranchId,
+  );
   final superadmin = SuperadminController(
     HttpSuperadminRepository(
       DioClient(baseUrl: AppConfig.apiBaseUrl),
@@ -56,6 +63,7 @@ Future<void> main() async {
       inventoryController: inventory,
       purchasingController: purchasing,
       posController: pos,
+      financeController: finance,
       superadminController: superadmin,
     ),
   );

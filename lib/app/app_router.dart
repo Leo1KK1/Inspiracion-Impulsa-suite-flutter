@@ -287,9 +287,9 @@ ShellRoute _tenantAdminRoutes() => ShellRoute(
       builder: (_, _) => const ExpensesPage(),
     ),
     GoRoute(
-      path: '/app/admin/finance/expenses/:id',
+      path: '/app/admin/finance/expenses/:expenseId',
       builder: (_, state) =>
-          ExpenseDetailPage(expenseId: state.pathParameters['id']!),
+          ExpenseDetailPage(expenseId: state.pathParameters['expenseId']!),
     ),
     GoRoute(
       path: '/app/admin/finance/categories',

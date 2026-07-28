@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
+import '../features/finance/presentation/controllers/finance_controller.dart';
 import '../features/inventory/presentation/controllers/inventory_controller.dart';
 import '../features/pos/presentation/controllers/pos_controller.dart';
 import '../features/purchasing/presentation/controllers/purchasing_controller.dart';
@@ -18,6 +19,7 @@ class ImpulsaSuiteApp extends StatefulWidget {
     required this.inventoryController,
     required this.purchasingController,
     required this.posController,
+    required this.financeController,
     required this.superadminController,
   });
 
@@ -26,6 +28,7 @@ class ImpulsaSuiteApp extends StatefulWidget {
   final InventoryController inventoryController;
   final PurchasingController purchasingController;
   final PosController posController;
+  final FinanceController financeController;
   final SuperadminController superadminController;
 
   @override
@@ -51,6 +54,7 @@ class _ImpulsaSuiteAppState extends State<ImpulsaSuiteApp> {
     inventoryController: widget.inventoryController,
     purchasingController: widget.purchasingController,
     posController: widget.posController,
+    financeController: widget.financeController,
     superadminController: widget.superadminController,
     child: MaterialApp.router(
       title: 'Impulsa Suite',
