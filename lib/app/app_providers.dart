@@ -50,16 +50,19 @@ class _AppProvidersState extends State<AppProviders> {
     restaurant = RestaurantController(MockRestaurantRepository());
     waiter = WaiterController(MockWaiterRepository());
     _observedBranchId = widget.sessionController.activeBranchId;
-    widget.sessionController.addListener(_syncBranch);
+    widget.sessionController.addListener(_syncSession);
   }
 
-  void _syncBranch() {
+  void _syncSession() {
     final branchId = widget.sessionController.activeBranchId;
+    widget.financeController.updateSession(
+      isOwner: widget.sessionController.isOwner,
+      branchId: branchId,
+    );
     if (branchId == _observedBranchId) return;
     _observedBranchId = branchId;
     widget.tenantAdminController.invalidate();
     widget.posController.setBranch(branchId);
-    widget.financeController.onSessionBranchChanged(branchId);
     if (widget.sessionController.hasAnyRole(const ['OWNER', 'MANAGER'])) {
       widget.tenantAdminController.load(force: true);
       if (branchId != null) {
@@ -88,7 +91,7 @@ class _AppProvidersState extends State<AppProviders> {
 
   @override
   void dispose() {
-    widget.sessionController.removeListener(_syncBranch);
+    widget.sessionController.removeListener(_syncSession);
     restaurant.dispose();
     waiter.dispose();
     super.dispose();

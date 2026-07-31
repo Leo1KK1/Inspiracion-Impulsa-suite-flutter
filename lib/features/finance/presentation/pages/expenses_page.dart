@@ -107,7 +107,9 @@ class _ExpensesPageState extends State<ExpensesPage> {
                 ),
               ),
               _StringFilter(
-                key: ValueKey(finance.selectedCategoryId),
+                key: ValueKey(
+                  'category:${finance.selectedCategoryId ?? '_all'}',
+                ),
                 label: 'Categoría',
                 value: finance.selectedCategoryId ?? '_all',
                 items: {
@@ -120,7 +122,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
               ),
               if (finance.isOwner)
                 _StringFilter(
-                  key: ValueKey(finance.selectedBranchId),
+                  key: ValueKey('branch:${finance.selectedBranchId ?? '_all'}'),
                   label: 'Sucursal',
                   value: finance.selectedBranchId ?? '_all',
                   items: {
@@ -139,7 +141,9 @@ class _ExpensesPageState extends State<ExpensesPage> {
                   value: session.session?.activeBranchName ?? 'Sucursal activa',
                 ),
               _StringFilter(
-                key: ValueKey(finance.selectedExpenseStatus),
+                key: ValueKey(
+                  'status:${finance.selectedExpenseStatus?.apiValue ?? '_all'}',
+                ),
                 label: 'Estado',
                 value: finance.selectedExpenseStatus?.apiValue ?? '_all',
                 items: const {

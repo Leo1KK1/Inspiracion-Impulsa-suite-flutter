@@ -10,9 +10,10 @@ enum FinanceStatus { idle, loading, success, error }
 class FinanceController extends ChangeNotifier {
   FinanceController(
     this._repository, {
-    required this.isOwner,
+    required bool isOwner,
     String? initialBranchId,
-  }) : activeBranchId = initialBranchId,
+  }) : _isOwner = isOwner,
+       activeBranchId = initialBranchId,
        selectedBranchId = isOwner ? null : initialBranchId {
     final now = DateTime.now();
     from = DateTime(now.year, now.month);
@@ -20,7 +21,7 @@ class FinanceController extends ChangeNotifier {
   }
 
   final FinanceRepository _repository;
-  final bool isOwner;
+  bool _isOwner;
 
   FinanceStatus status = FinanceStatus.idle;
   List<Expense> expenses = const [];
@@ -44,10 +45,11 @@ class FinanceController extends ChangeNotifier {
   CancelToken? _loadCancelToken;
   int _loadGeneration = 0;
 
-  bool get canManageCategories => isOwner;
+  bool get isOwner => _isOwner;
+  bool get canManageCategories => _isOwner;
 
   List<ExpenseCategoryRef> get categoryOptions {
-    if (isOwner) {
+    if (_isOwner) {
       return categories
           .where((category) => category.isActive)
           .map((category) => category.reference)
@@ -77,7 +79,7 @@ class FinanceController extends ChangeNotifier {
 
   Future<void> load({bool force = false}) async {
     if (status == FinanceStatus.loading && !force) return;
-    if (!isOwner && activeBranchId == null) {
+    if (!_isOwner && activeBranchId == null) {
       status = FinanceStatus.error;
       errorMessage = 'Selecciona una sucursal antes de consultar finanzas.';
       notifyListeners();
@@ -93,19 +95,19 @@ class FinanceController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final analyticsBranch = isOwner ? selectedBranchId : null;
+      final analyticsBranch = _isOwner ? selectedBranchId : null;
       final results = await Future.wait<Object>([
         _repository.getExpenses(
           ExpenseQuery(
             from: from,
             to: to,
             categoryId: selectedCategoryId,
-            branchId: isOwner ? selectedBranchId : null,
+            branchId: _isOwner ? selectedBranchId : null,
             status: selectedExpenseStatus,
           ),
           cancelToken: cancelToken,
         ),
-        if (isOwner)
+        if (_isOwner)
           _repository.getCategories(cancelToken: cancelToken)
         else
           Future<List<ExpenseCategory>>.value(const []),
@@ -153,9 +155,18 @@ class FinanceController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void onSessionBranchChanged(String? branchId) {
+  void updateSession({required bool isOwner, String? branchId}) {
+    final ownerChanged = _isOwner != isOwner;
+    final branchChanged = activeBranchId != branchId;
+    if (!ownerChanged && !branchChanged) return;
+
+    _isOwner = isOwner;
     activeBranchId = branchId;
-    if (!isOwner) selectedBranchId = branchId;
+    if (ownerChanged && isOwner) {
+      selectedBranchId = null;
+    } else if (!isOwner) {
+      selectedBranchId = branchId;
+    }
     invalidate();
   }
 
@@ -182,7 +193,7 @@ class FinanceController extends ChangeNotifier {
   }
 
   Future<void> setBranchFilter(String? branchId) async {
-    if (!isOwner || selectedBranchId == branchId) return;
+    if (!_isOwner || selectedBranchId == branchId) return;
     selectedBranchId = branchId;
     await load(force: true);
   }
@@ -223,7 +234,7 @@ class FinanceController extends ChangeNotifier {
   }
 
   Future<bool> createExpense(ExpenseMutation mutation) => _mutateExpense(
-    () => _repository.createExpense(mutation, includeBranch: isOwner),
+    () => _repository.createExpense(mutation, includeBranch: _isOwner),
   );
 
   Future<bool> updateExpense(String expenseId, ExpenseMutation mutation) =>
@@ -231,7 +242,7 @@ class FinanceController extends ChangeNotifier {
         () => _repository.updateExpense(
           expenseId,
           mutation,
-          includeBranch: isOwner,
+          includeBranch: _isOwner,
         ),
         selectResult: true,
       );
@@ -278,7 +289,7 @@ class FinanceController extends ChangeNotifier {
   Future<bool> _mutateCategory(
     Future<ExpenseCategory> Function() action,
   ) async {
-    if (!isOwner || saving) return false;
+    if (!_isOwner || saving) return false;
     saving = true;
     errorMessage = null;
     notifyListeners();
