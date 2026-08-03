@@ -1,338 +1,327 @@
+import 'package:dio/dio.dart';
+
+import '../../../../core/network/api_exception.dart';
+import '../../../../core/network/dio_client.dart';
+import '../../../waiter/data/models/waiter_models.dart';
 import '../models/restaurant_models.dart';
 
 abstract interface class RestaurantRepository {
-  Future<List<RestaurantTable>> getTables({String? branchId});
-  Future<List<KitchenOrder>> getKitchenOrders({String? branchId});
+  Future<List<MenuProduct>> searchMenu(
+    String query, {
+    int limit = 50,
+    CancelToken? cancelToken,
+  });
+  Future<MenuProduct> getProduct(String productId);
+  Future<List<RestaurantTable>> getTables({
+    RestaurantTableStatus? status,
+    String? areaId,
+    CancelToken? cancelToken,
+  });
+  Future<RestaurantTable> getTable(String tableId);
+  Future<TableSession> openSession(
+    String tableId,
+    OpenTableSessionRequest request,
+  );
+  Future<TableSession> assignWaiter(
+    String tableId, {
+    required String waiterUserId,
+  });
+  Future<KitchenOrder> createOrder(
+    String tableId, {
+    required List<WaiterOrderLine> items,
+    String? notes,
+  });
+  Future<List<KitchenOrder>> getTableOrders(String tableId);
+  Future<KitchenOrder> sendToKitchen(String orderId);
+  Future<KitchenOrder> updateOrderStatus(
+    String orderId,
+    KitchenOrderStatus status,
+  );
+  Future<SplitBillResult> splitBillEqual(String tableId, {required int parts});
+  Future<SplitBillResult> splitBillByItem(
+    String tableId, {
+    required List<SplitBillAssignment> assignments,
+  });
+  Future<RestaurantCheckoutResult> checkout(
+    String tableId,
+    RestaurantCheckoutRequest request,
+  );
+  Future<List<KitchenOrder>> getKitchenOrders({
+    KitchenOrderStatus? status,
+    String? tableSessionId,
+    CancelToken? cancelToken,
+  });
+  Future<KitchenOrder> getKitchenOrder(String orderId);
+  Future<KitchenOrder> updateKitchenItemStatus(
+    String orderId,
+    String itemId,
+    KitchenItemStatus status,
+  );
 }
 
-class MockRestaurantRepository implements RestaurantRepository {
-  @override
-  Future<List<RestaurantTable>> getTables({String? branchId}) async {
-    await Future<void>.delayed(const Duration(milliseconds: 220));
-    return const [
-      RestaurantTable(
-        id: 'S-01',
-        number: 1,
-        zone: RestaurantZone.salon,
-        status: RestaurantTableStatus.available,
-        capacity: 4,
-        guestCount: 0,
-        total: 0,
-      ),
-      RestaurantTable(
-        id: 'S-02',
-        number: 2,
-        zone: RestaurantZone.salon,
-        status: RestaurantTableStatus.occupied,
-        capacity: 6,
-        guestCount: 5,
-        waiterName: 'Ana García',
-        openedMinutes: 45,
-        total: 1340,
-      ),
-      RestaurantTable(
-        id: 'S-03',
-        number: 3,
-        zone: RestaurantZone.salon,
-        status: RestaurantTableStatus.inPreparation,
-        capacity: 4,
-        guestCount: 4,
-        waiterName: 'Carlos Reyes',
-        openedMinutes: 32,
-        total: 780,
-      ),
-      RestaurantTable(
-        id: 'S-04',
-        number: 4,
-        zone: RestaurantZone.salon,
-        status: RestaurantTableStatus.readyToBill,
-        capacity: 8,
-        guestCount: 7,
-        waiterName: 'Ana García',
-        openedMinutes: 78,
-        total: 2180,
-      ),
-      RestaurantTable(
-        id: 'S-05',
-        number: 5,
-        zone: RestaurantZone.salon,
-        status: RestaurantTableStatus.occupied,
-        capacity: 2,
-        guestCount: 2,
-        waiterName: 'María Torres',
-        openedMinutes: 22,
-        total: 460,
-      ),
-      RestaurantTable(
-        id: 'S-06',
-        number: 6,
-        zone: RestaurantZone.salon,
-        status: RestaurantTableStatus.waitingOrder,
-        capacity: 4,
-        guestCount: 3,
-        waiterName: 'Juan Pérez',
-        openedMinutes: 8,
-        total: 0,
-      ),
-      RestaurantTable(
-        id: 'S-07',
-        number: 7,
-        zone: RestaurantZone.salon,
-        status: RestaurantTableStatus.available,
-        capacity: 4,
-        guestCount: 0,
-        total: 0,
-      ),
-      RestaurantTable(
-        id: 'S-08',
-        number: 8,
-        zone: RestaurantZone.salon,
-        status: RestaurantTableStatus.dirty,
-        capacity: 6,
-        guestCount: 0,
-        total: 0,
-      ),
-      RestaurantTable(
-        id: 'S-09',
-        number: 9,
-        zone: RestaurantZone.salon,
-        status: RestaurantTableStatus.reserved,
-        capacity: 8,
-        guestCount: 0,
-        reservedFor: 'Martínez 20:00',
-        total: 0,
-      ),
-      RestaurantTable(
-        id: 'T-01',
-        number: 11,
-        zone: RestaurantZone.terraza,
-        status: RestaurantTableStatus.occupied,
-        capacity: 4,
-        guestCount: 2,
-        waiterName: 'Carlos Reyes',
-        openedMinutes: 15,
-        total: 380,
-      ),
-      RestaurantTable(
-        id: 'T-02',
-        number: 12,
-        zone: RestaurantZone.terraza,
-        status: RestaurantTableStatus.available,
-        capacity: 4,
-        guestCount: 0,
-        total: 0,
-      ),
-      RestaurantTable(
-        id: 'T-03',
-        number: 13,
-        zone: RestaurantZone.terraza,
-        status: RestaurantTableStatus.inPreparation,
-        capacity: 6,
-        guestCount: 5,
-        waiterName: 'María Torres',
-        openedMinutes: 40,
-        total: 1120,
-      ),
-      RestaurantTable(
-        id: 'T-05',
-        number: 15,
-        zone: RestaurantZone.terraza,
-        status: RestaurantTableStatus.readyToBill,
-        capacity: 4,
-        guestCount: 4,
-        waiterName: 'Carlos Reyes',
-        openedMinutes: 65,
-        total: 1680,
-      ),
-      RestaurantTable(
-        id: 'B-01',
-        number: 17,
-        zone: RestaurantZone.barra,
-        status: RestaurantTableStatus.occupied,
-        capacity: 2,
-        guestCount: 1,
-        waiterName: 'Juan Pérez',
-        openedMinutes: 20,
-        total: 240,
-      ),
-      RestaurantTable(
-        id: 'B-03',
-        number: 19,
-        zone: RestaurantZone.barra,
-        status: RestaurantTableStatus.waitingOrder,
-        capacity: 2,
-        guestCount: 1,
-        waiterName: 'Juan Pérez',
-        openedMinutes: 5,
-        total: 0,
-      ),
-      RestaurantTable(
-        id: 'P-01',
-        number: 21,
-        zone: RestaurantZone.privado,
-        status: RestaurantTableStatus.occupied,
-        capacity: 12,
-        guestCount: 10,
-        waiterName: 'Ana García',
-        openedMinutes: 90,
-        total: 4280,
-      ),
-      RestaurantTable(
-        id: 'P-02',
-        number: 22,
-        zone: RestaurantZone.privado,
-        status: RestaurantTableStatus.available,
-        capacity: 10,
-        guestCount: 0,
-        total: 0,
-      ),
-      RestaurantTable(
-        id: 'P-03',
-        number: 23,
-        zone: RestaurantZone.privado,
-        status: RestaurantTableStatus.reserved,
-        capacity: 8,
-        guestCount: 0,
-        reservedFor: 'Evento Corp 19:30',
-        total: 0,
-      ),
-    ];
-  }
+class HttpRestaurantRepository implements RestaurantRepository {
+  HttpRestaurantRepository(this._client);
+
+  final DioClient _client;
+
+  static const _restaurant = '/api/v1/tenant/restaurant';
+  static const _kitchen = '/api/v1/tenant/kitchen';
 
   @override
-  Future<List<KitchenOrder>> getKitchenOrders({String? branchId}) async {
-    await Future<void>.delayed(const Duration(milliseconds: 220));
-    return const [
-      KitchenOrder(
-        id: 'KO-019',
-        tableNumber: 6,
-        zone: RestaurantZone.salon,
-        waiterName: 'Juan Pérez',
-        status: KitchenOrderStatus.newOrder,
-        sentMinutesAgo: 2,
-        items: [
-          KitchenOrderItem(
-            name: 'Taco de cochinita x3',
-            quantity: 2,
-            station: KitchenStation.caliente,
-          ),
-          KitchenOrderItem(
-            name: 'Refresco 600ml',
-            quantity: 2,
-            station: KitchenStation.bebidas,
-            notes: 'Sin hielo',
-          ),
-        ],
+  Future<List<MenuProduct>> searchMenu(
+    String query, {
+    int limit = 50,
+    CancelToken? cancelToken,
+  }) async => _objects(
+    await _requestList(
+      () => _client.dio.get<Object?>(
+        '$_restaurant/products/search',
+        queryParameters: {
+          if (query.trim().isNotEmpty) 'q': query.trim(),
+          'limit': limit.clamp(1, 100),
+        },
+        cancelToken: cancelToken,
       ),
-      KitchenOrder(
-        id: 'KO-020',
-        tableNumber: 19,
-        zone: RestaurantZone.barra,
-        waiterName: 'Juan Pérez',
-        status: KitchenOrderStatus.newOrder,
-        sentMinutesAgo: 1,
-        items: [
-          KitchenOrderItem(
-            name: 'Michelada XL',
-            quantity: 1,
-            station: KitchenStation.bebidas,
-            notes: 'Clamato extra',
-          ),
-          KitchenOrderItem(
-            name: 'Guacamole con totopos',
-            quantity: 1,
-            station: KitchenStation.fria,
-          ),
-        ],
+    ),
+    MenuProduct.fromJson,
+  );
+
+  @override
+  Future<MenuProduct> getProduct(String productId) async =>
+      MenuProduct.fromJson(
+        await _requestMap(
+          () => _client.dio.get<Object?>('$_restaurant/products/$productId'),
+        ),
+      );
+
+  @override
+  Future<List<RestaurantTable>> getTables({
+    RestaurantTableStatus? status,
+    String? areaId,
+    CancelToken? cancelToken,
+  }) async => _objects(
+    await _requestList(
+      () => _client.dio.get<Object?>(
+        '$_restaurant/tables',
+        queryParameters: {
+          if (status != null) 'status': status.apiValue,
+          if (areaId?.isNotEmpty == true) 'areaId': areaId,
+        },
+        cancelToken: cancelToken,
       ),
-      KitchenOrder(
-        id: 'KO-015',
-        tableNumber: 2,
-        zone: RestaurantZone.salon,
-        waiterName: 'Ana García',
-        status: KitchenOrderStatus.inPreparation,
-        sentMinutesAgo: 14,
-        items: [
-          KitchenOrderItem(
-            name: 'Filete a la plancha',
-            quantity: 2,
-            station: KitchenStation.caliente,
-            notes: 'Sin guarnición',
-          ),
-          KitchenOrderItem(
-            name: 'Costilla BBQ',
-            quantity: 1,
-            station: KitchenStation.caliente,
-            notes: 'Término 3/4',
-          ),
-        ],
+    ),
+    RestaurantTable.fromJson,
+  );
+
+  @override
+  Future<RestaurantTable> getTable(String tableId) async =>
+      RestaurantTable.fromJson(
+        await _requestMap(
+          () => _client.dio.get<Object?>('$_restaurant/tables/$tableId'),
+        ),
+      );
+
+  @override
+  Future<TableSession> openSession(
+    String tableId,
+    OpenTableSessionRequest request,
+  ) async => TableSession.fromJson(
+    await _requestMap(
+      () => _client.dio.post<Object?>(
+        '$_restaurant/tables/$tableId/open-session',
+        data: request.toJson(),
       ),
-      KitchenOrder(
-        id: 'KO-017',
-        tableNumber: 13,
-        zone: RestaurantZone.terraza,
-        waiterName: 'María Torres',
-        status: KitchenOrderStatus.inPreparation,
-        sentMinutesAgo: 22,
-        items: [
-          KitchenOrderItem(
-            name: 'Mariscos al mojo',
-            quantity: 2,
-            station: KitchenStation.caliente,
-          ),
-          KitchenOrderItem(
-            name: 'Ceviche tostadas x3',
-            quantity: 1,
-            station: KitchenStation.fria,
-          ),
-        ],
+    ),
+  );
+
+  @override
+  Future<TableSession> assignWaiter(
+    String tableId, {
+    required String waiterUserId,
+  }) async => TableSession.fromJson(
+    await _requestMap(
+      () => _client.dio.post<Object?>(
+        '$_restaurant/tables/$tableId/assign-waiter',
+        data: {'waiterUserId': waiterUserId},
       ),
-      KitchenOrder(
-        id: 'KO-018',
-        tableNumber: 21,
-        zone: RestaurantZone.privado,
-        waiterName: 'Ana García',
-        status: KitchenOrderStatus.inPreparation,
-        sentMinutesAgo: 28,
-        items: [
-          KitchenOrderItem(
-            name: 'Menú ejecutivo',
-            quantity: 10,
-            station: KitchenStation.caliente,
-            notes: 'Incluye postre',
-          ),
-        ],
+    ),
+  );
+
+  @override
+  Future<KitchenOrder> createOrder(
+    String tableId, {
+    required List<WaiterOrderLine> items,
+    String? notes,
+  }) async => KitchenOrder.fromJson(
+    await _requestMap(
+      () => _client.dio.post<Object?>(
+        '$_restaurant/tables/$tableId/orders',
+        data: {
+          'items': items.map((item) => item.toJson()).toList(growable: false),
+          if (notes?.trim().isNotEmpty == true) 'notes': notes!.trim(),
+        },
       ),
-      KitchenOrder(
-        id: 'KO-012',
-        tableNumber: 5,
-        zone: RestaurantZone.salon,
-        waiterName: 'María Torres',
-        status: KitchenOrderStatus.ready,
-        sentMinutesAgo: 8,
-        items: [
-          KitchenOrderItem(
-            name: 'Pasta al pomodoro',
-            quantity: 2,
-            station: KitchenStation.caliente,
+    ),
+  );
+
+  @override
+  Future<List<KitchenOrder>> getTableOrders(String tableId) async => _objects(
+    await _requestList(
+      () => _client.dio.get<Object?>('$_restaurant/tables/$tableId/orders'),
+    ),
+    KitchenOrder.fromJson,
+  );
+
+  @override
+  Future<KitchenOrder> sendToKitchen(String orderId) async =>
+      KitchenOrder.fromJson(
+        await _requestMap(
+          () => _client.dio.post<Object?>(
+            '$_restaurant/orders/$orderId/send-to-kitchen',
           ),
-        ],
+        ),
+      );
+
+  @override
+  Future<KitchenOrder> updateOrderStatus(
+    String orderId,
+    KitchenOrderStatus status,
+  ) async => KitchenOrder.fromJson(
+    await _requestMap(
+      () => _client.dio.patch<Object?>(
+        '$_restaurant/orders/$orderId/status',
+        data: {'status': status.apiValue},
       ),
-      KitchenOrder(
-        id: 'KO-008',
-        tableNumber: 2,
-        zone: RestaurantZone.salon,
-        waiterName: 'Ana García',
-        status: KitchenOrderStatus.delivered,
-        sentMinutesAgo: 38,
-        items: [
-          KitchenOrderItem(
-            name: 'Carpaccio de atún',
-            quantity: 1,
-            station: KitchenStation.fria,
-          ),
-        ],
+    ),
+  );
+
+  @override
+  Future<SplitBillResult> splitBillEqual(
+    String tableId, {
+    required int parts,
+  }) async => SplitBillResult.fromJson(
+    await _requestMap(
+      () => _client.dio.post<Object?>(
+        '$_restaurant/tables/$tableId/split-bill',
+        data: {'mode': 'EQUAL', 'parts': parts},
       ),
-    ];
+    ),
+  );
+
+  @override
+  Future<SplitBillResult> splitBillByItem(
+    String tableId, {
+    required List<SplitBillAssignment> assignments,
+  }) async => SplitBillResult.fromJson(
+    await _requestMap(
+      () => _client.dio.post<Object?>(
+        '$_restaurant/tables/$tableId/split-bill',
+        data: {
+          'mode': 'BY_ITEM',
+          'assignments': assignments
+              .map((assignment) => assignment.toJson())
+              .toList(growable: false),
+        },
+      ),
+    ),
+  );
+
+  @override
+  Future<RestaurantCheckoutResult> checkout(
+    String tableId,
+    RestaurantCheckoutRequest request,
+  ) async => RestaurantCheckoutResult.fromJson(
+    await _requestMap(
+      () => _client.dio.post<Object?>(
+        '$_restaurant/tables/$tableId/checkout',
+        data: request.toJson(),
+      ),
+    ),
+  );
+
+  @override
+  Future<List<KitchenOrder>> getKitchenOrders({
+    KitchenOrderStatus? status,
+    String? tableSessionId,
+    CancelToken? cancelToken,
+  }) async => _objects(
+    await _requestList(
+      () => _client.dio.get<Object?>(
+        '$_kitchen/orders',
+        queryParameters: {
+          if (status != null) 'status': status.apiValue,
+          if (tableSessionId?.isNotEmpty == true)
+            'tableSessionId': tableSessionId,
+        },
+        cancelToken: cancelToken,
+      ),
+    ),
+    KitchenOrder.fromJson,
+  );
+
+  @override
+  Future<KitchenOrder> getKitchenOrder(String orderId) async =>
+      KitchenOrder.fromJson(
+        await _requestMap(
+          () => _client.dio.get<Object?>('$_kitchen/orders/$orderId'),
+        ),
+      );
+
+  @override
+  Future<KitchenOrder> updateKitchenItemStatus(
+    String orderId,
+    String itemId,
+    KitchenItemStatus status,
+  ) async => KitchenOrder.fromJson(
+    await _requestMap(
+      () => _client.dio.patch<Object?>(
+        '$_kitchen/orders/$orderId/items/$itemId/status',
+        data: {'status': status.apiValue},
+      ),
+    ),
+  );
+
+  Future<Map<String, Object?>> _requestMap(
+    Future<Response<Object?>> Function() request,
+  ) async {
+    final data = await _requestData(request);
+    if (data is! Map) throw _invalidResponse;
+    return data.cast<String, Object?>();
   }
+
+  Future<List<Object?>> _requestList(
+    Future<Response<Object?>> Function() request,
+  ) async {
+    final data = await _requestData(request);
+    if (data is! List) throw _invalidResponse;
+    return data.cast<Object?>();
+  }
+
+  Future<Object?> _requestData(
+    Future<Response<Object?>> Function() request,
+  ) async {
+    try {
+      final response = await request();
+      final envelope = response.data;
+      if (envelope is! Map || envelope['success'] != true) {
+        throw _invalidResponse;
+      }
+      return envelope['data'];
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) rethrow;
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  static List<T> _objects<T>(
+    List<Object?> values,
+    T Function(Map<String, Object?> json) factory,
+  ) => values
+      .whereType<Map>()
+      .map((value) => factory(value.cast<String, Object?>()))
+      .toList(growable: false);
+
+  static const _invalidResponse = ApiException(
+    'El servidor devolvió una respuesta no válida.',
+  );
 }

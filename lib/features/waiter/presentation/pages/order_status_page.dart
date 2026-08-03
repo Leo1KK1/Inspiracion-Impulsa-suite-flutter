@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_tokens.dart';
-import '../../../../shared/widgets/app_badges.dart';
+import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_states.dart';
-import '../../data/models/waiter_models.dart';
+import '../../../restaurant_floor/data/models/restaurant_models.dart';
+import '../../../restaurant_floor/presentation/widgets/table_status.dart';
 import '../controllers/waiter_controller.dart';
 
 class OrderStatusPage extends StatefulWidget {
@@ -20,308 +22,292 @@ class OrderStatusPage extends StatefulWidget {
 }
 
 class _OrderStatusPageState extends State<OrderStatusPage> {
-  late Future<List<ComandaItem>> _future;
-
   @override
   void initState() {
     super.initState();
-    _future = context.read<WaiterController>().getOrderItems(widget.orderId);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<WaiterController>().loadOrder(widget.orderId);
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<ComandaItem>>(
-      future: _future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const AppLoadingState(message: 'Consultando la comanda…');
-        }
-        if (snapshot.hasError) {
-          return AppErrorState(
-            message: 'No fue posible consultar la comanda.',
-            onRetry: () => setState(
-              () => _future = context.read<WaiterController>().getOrderItems(
-                widget.orderId,
-              ),
-            ),
-          );
-        }
-        final items = snapshot.data ?? const [];
-        if (items.isEmpty) {
-          return const OperationalEmptyState(
-            title: 'La comanda no tiene productos',
-            message: 'Agrega productos desde la sesión de mesa.',
-          );
-        }
-        return _OrderStatusContent(orderId: widget.orderId, items: items);
-      },
-    );
-  }
-}
-
-class _OrderStatusContent extends StatelessWidget {
-  const _OrderStatusContent({required this.orderId, required this.items});
-
-  final String orderId;
-  final List<ComandaItem> items;
-
-  @override
-  Widget build(BuildContext context) {
-    final ready = items
+    final waiter = context.watch<WaiterController>();
+    if (waiter.loadingOrder && waiter.selectedOrder == null) {
+      return const AppLoadingState(message: 'Consultando la comanda real…');
+    }
+    final order = waiter.selectedOrder;
+    if (order == null) {
+      return AppErrorState(
+        message: waiter.errorMessage ?? 'No fue posible consultar la comanda.',
+        onRetry: () => waiter.loadOrder(widget.orderId),
+      );
+    }
+    final tableId = order.tableSession?.tableId;
+    final completed = order.items
         .where(
           (item) =>
-              item.status == ComandaItemStatus.ready ||
-              item.status == ComandaItemStatus.served,
+              item.status == KitchenItemStatus.ready ||
+              item.status == KitchenItemStatus.delivered ||
+              item.status == KitchenItemStatus.cancelled,
         )
         .length;
-    final stations = <String, List<ComandaItem>>{};
-    for (final item in items) {
-      stations.putIfAbsent(item.station, () => []).add(item);
-    }
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSpacing.xl),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1120),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: () => context.go('/app/restaurant/waiter'),
-                    icon: const Icon(Icons.arrow_back),
-                  ),
-                  Expanded(
-                    child: Text(
-                      'Comanda $orderId',
+    final progress = order.items.isEmpty ? 0.0 : completed / order.items.length;
+    return RefreshIndicator(
+      onRefresh: () => waiter.loadOrder(widget.orderId),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1120),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    IconButton(
+                      tooltip: 'Volver',
+                      onPressed: () => tableId == null
+                          ? context.go('/app/restaurant/waiter')
+                          : context.go(
+                              '/app/restaurant/waiter/tables/$tableId',
+                            ),
+                      icon: const Icon(Icons.arrow_back),
+                    ),
+                    Text(
+                      order.folio,
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
-                  ),
-                  const AppBadge(
-                    label: '18 MIN · EN PREPARACIÓN',
-                    color: AppColors.warning,
-                    icon: Icons.timer_outlined,
+                    KitchenOrderStatusBadge(status: order.status),
+                    Text('${order.elapsedMinutes} min'),
+                    IconButton.outlined(
+                      tooltip: 'Actualizar comanda',
+                      onPressed: waiter.loadingOrder
+                          ? null
+                          : () => waiter.loadOrder(widget.orderId),
+                      icon: const Icon(Icons.refresh),
+                    ),
+                  ],
+                ),
+                if (waiter.errorMessage != null) ...[
+                  const SizedBox(height: 12),
+                  AppCard(
+                    color: AppColors.destructive.withValues(alpha: 0.08),
+                    child: Text(
+                      waiter.errorMessage!,
+                      style: const TextStyle(color: AppColors.destructive),
+                    ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 16),
-              AppCard(
-                color: AppColors.warning.withValues(alpha: 0.08),
-                child: const Row(
-                  children: [
-                    Icon(Icons.schedule, color: AppColors.warning),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Esta comanda superó 15 minutos. Cocina caliente sigue preparando dos partidas.',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              AppCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Text(
-                          'Progreso de la comanda',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                        const Spacer(),
-                        Text('$ready de ${items.length} listos'),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    LinearProgressIndicator(
-                      value: ready / items.length,
-                      minHeight: 10,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final columns = constraints.maxWidth >= 900 ? 3 : 1;
-                  return GridView.count(
-                    crossAxisCount: columns,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisSpacing: 14,
-                    mainAxisSpacing: 14,
-                    childAspectRatio: columns == 3 ? 1.15 : 2.4,
+                const SizedBox(height: 16),
+                AppCard(
+                  child: Wrap(
+                    spacing: 24,
+                    runSpacing: 12,
                     children: [
-                      for (final entry in stations.entries)
-                        _StationCard(station: entry.key, items: entry.value),
+                      Text(order.tableLabel),
+                      Text(
+                        'Mesero: ${order.waiterUser?.fullName ?? order.waiterUserId}',
+                      ),
+                      Text('Creada: ${_dateTime(order.createdAt)}'),
+                      Text('Actualizada: ${_dateTime(order.updatedAt)}'),
+                      Text('Total: ${AppFormatters.currency(order.total)}'),
+                      if (order.notes?.isNotEmpty == true)
+                        Text('Notas: ${order.notes}'),
                     ],
-                  );
-                },
-              ),
-              const SizedBox(height: 20),
-              _KitchenTimeline(items: items),
-              const SizedBox(height: 20),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () =>
-                        context.go('/app/restaurant/waiter/tables/TBL-08'),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Nueva comanda'),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: () =>
-                        context.go('/app/restaurant/waiter/split-bill/TBL-08'),
-                    icon: const Icon(Icons.call_split),
-                    label: const Text('Dividir cuenta'),
+                ),
+                const SizedBox(height: 16),
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text(
+                            'Progreso de partidas',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          const Spacer(),
+                          Text('$completed de ${order.items.length} resueltas'),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 10,
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 16),
+                if (order.items.isEmpty)
+                  const OperationalEmptyState(
+                    title: 'Sin partidas',
+                    message: 'La comanda no contiene productos.',
+                  )
+                else
+                  LayoutBuilder(
+                    builder: (context, constraints) => GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: constraints.maxWidth >= 850 ? 3 : 1,
+                        crossAxisSpacing: 14,
+                        mainAxisSpacing: 14,
+                        childAspectRatio: constraints.maxWidth >= 850
+                            ? 1.25
+                            : 2.7,
+                      ),
+                      itemCount: order.items.length,
+                      itemBuilder: (context, index) =>
+                          _ItemCard(item: order.items[index]),
+                    ),
+                  ),
+                const SizedBox(height: 20),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    if (order.status == KitchenOrderStatus.pending)
+                      FilledButton.icon(
+                        onPressed: waiter.saving || tableId == null
+                            ? null
+                            : () async {
+                                final success = await waiter.sendExistingOrder(
+                                  tableId,
+                                  order.id,
+                                );
+                                if (success) await waiter.loadOrder(order.id);
+                              },
+                        icon: const Icon(Icons.send),
+                        label: const Text('Enviar a cocina'),
+                      ),
+                    if (order.status == KitchenOrderStatus.ready)
+                      FilledButton.icon(
+                        onPressed: waiter.saving
+                            ? null
+                            : () => waiter.updateOrderStatus(
+                                order.id,
+                                KitchenOrderStatus.delivered,
+                                tableId: tableId,
+                              ),
+                        icon: const Icon(Icons.delivery_dining_outlined),
+                        label: const Text('Marcar entregada'),
+                      ),
+                    if (order.status != KitchenOrderStatus.delivered &&
+                        order.status != KitchenOrderStatus.cancelled)
+                      OutlinedButton.icon(
+                        onPressed: waiter.saving
+                            ? null
+                            : () =>
+                                  _cancelOrder(context, waiter, order, tableId),
+                        icon: const Icon(Icons.cancel_outlined),
+                        label: const Text('Cancelar comanda'),
+                      ),
+                    if (tableId != null)
+                      OutlinedButton.icon(
+                        onPressed: () => context.go(
+                          '/app/restaurant/waiter/tables/$tableId',
+                        ),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Nueva comanda'),
+                      ),
+                    if (tableId != null)
+                      OutlinedButton.icon(
+                        onPressed: () => context.go(
+                          '/app/restaurant/waiter/split-bill/$tableId',
+                        ),
+                        icon: const Icon(Icons.call_split),
+                        label: const Text('Dividir cuenta'),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  Future<void> _cancelOrder(
+    BuildContext context,
+    WaiterController waiter,
+    KitchenOrder order,
+    String? tableId,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cancelar comanda'),
+        content: const Text(
+          'El backend cancelará la comanda y liberará sus reservas de inventario.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Volver'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Cancelar comanda'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await waiter.updateOrderStatus(
+      order.id,
+      KitchenOrderStatus.cancelled,
+      tableId: tableId,
+    );
+    await waiter.loadOrder(order.id);
+  }
+
+  String _dateTime(DateTime? value) => value == null
+      ? 'Sin fecha'
+      : DateFormat('dd/MM/yyyy HH:mm', 'es_MX').format(value);
 }
 
-class _StationCard extends StatelessWidget {
-  const _StationCard({required this.station, required this.items});
+class _ItemCard extends StatelessWidget {
+  const _ItemCard({required this.item});
 
-  final String station;
-  final List<ComandaItem> items;
+  final KitchenOrderItem item;
 
   @override
   Widget build(BuildContext context) => AppCard(
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(station, style: Theme.of(context).textTheme.titleMedium),
-        const Divider(height: 22),
-        for (final item in items)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${item.quantity} × ${item.name}',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _ItemStatusBadge(status: item.status),
-                  ],
-                ),
-                if (item.notes case final notes?)
-                  Container(
-                    margin: const EdgeInsets.only(top: 6),
-                    padding: const EdgeInsets.all(7),
-                    decoration: BoxDecoration(
-                      color: AppColors.warning.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(notes, style: const TextStyle(fontSize: 11)),
-                  ),
-              ],
+        Text(
+          '${item.quantity} × ${item.productName}',
+          style: Theme.of(context).textTheme.titleMedium,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 8),
+        Text(kitchenItemStatusLabel(item.status)),
+        Text(AppFormatters.currency(item.lineTotal)),
+        if (item.notes?.isNotEmpty == true) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.warning.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
             ),
+            child: Text(item.notes!),
           ),
+        ],
       ],
     ),
   );
-}
-
-class _ItemStatusBadge extends StatelessWidget {
-  const _ItemStatusBadge({required this.status});
-
-  final ComandaItemStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    final (label, color) = switch (status) {
-      ComandaItemStatus.queued => ('EN COLA', AppColors.mutedForeground),
-      ComandaItemStatus.inPreparation => ('PREPARANDO', AppColors.warning),
-      ComandaItemStatus.ready => ('LISTO', AppColors.success),
-      ComandaItemStatus.served => ('SERVIDO', AppColors.primary),
-    };
-    return AppBadge(label: label, color: color);
-  }
-}
-
-class _KitchenTimeline extends StatelessWidget {
-  const _KitchenTimeline({required this.items});
-
-  final List<ComandaItem> items;
-
-  @override
-  Widget build(BuildContext context) {
-    const steps = [
-      ('Comanda enviada', '19:12', true),
-      ('Cocina confirmó', '19:14', true),
-      ('Preparación en curso', '19:18', true),
-      ('Todos los productos listos', 'Pendiente', false),
-      ('Entrega en mesa', 'Pendiente', false),
-    ];
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Seguimiento de cocina',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 14),
-          for (var i = 0; i < steps.length; i++)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Column(
-                  children: [
-                    Container(
-                      width: 15,
-                      height: 15,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: steps[i].$3
-                            ? AppColors.tenantAccent
-                            : Colors.white,
-                        border: Border.all(color: AppColors.tenantAccent),
-                        boxShadow: i == 2
-                            ? [
-                                BoxShadow(
-                                  color: AppColors.tenantAccent.withValues(
-                                    alpha: 0.35,
-                                  ),
-                                  blurRadius: 10,
-                                ),
-                              ]
-                            : null,
-                      ),
-                    ),
-                    if (i < steps.length - 1)
-                      Container(width: 2, height: 32, color: AppColors.border),
-                  ],
-                ),
-                const SizedBox(width: 12),
-                Expanded(child: Text(steps[i].$1)),
-                Text(
-                  steps[i].$2,
-                  style: const TextStyle(color: AppColors.mutedForeground),
-                ),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
 }

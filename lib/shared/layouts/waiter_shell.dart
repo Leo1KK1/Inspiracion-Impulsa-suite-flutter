@@ -1,36 +1,49 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../features/session/presentation/controllers/tenant_session_controller.dart';
 
 class WaiterShell extends StatelessWidget {
   const WaiterShell({super.key, required this.child});
+
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < 820;
+    final session = context.watch<TenantSessionController>();
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7F9),
       appBar: AppBar(
         backgroundColor: AppColors.waiterNavy,
         foregroundColor: Colors.white,
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Servicio de mesas', style: TextStyle(fontSize: 16)),
+            const Text('Servicio de mesas', style: TextStyle(fontSize: 16)),
             Text(
-              'Sucursal CDMX Centro · WAITER',
-              style: TextStyle(fontSize: 11, color: Color(0xFFB8D7E5)),
+              '${session.session?.activeBranchName ?? 'Sin sucursal'} · '
+              '${session.roleCodes.firstOrNull ?? 'USUARIO'}',
+              style: const TextStyle(fontSize: 11, color: Color(0xFFB8D7E5)),
             ),
           ],
         ),
         actions: [
           IconButton(
-            tooltip: 'Panel administrativo',
-            onPressed: () => context.go('/app/dashboard'),
-            icon: const Icon(Icons.dashboard_outlined),
+            tooltip: 'Cambiar sucursal',
+            onPressed: session.canSwitchBranch
+                ? () => context.go('/app/branch-context')
+                : null,
+            icon: const Icon(Icons.account_tree_outlined),
           ),
+          if (session.hasAnyRole(const ['OWNER', 'MANAGER']))
+            IconButton(
+              tooltip: 'Panel administrativo',
+              onPressed: () => context.go('/app/dashboard'),
+              icon: const Icon(Icons.dashboard_outlined),
+            ),
         ],
       ),
       body: child,
@@ -38,13 +51,10 @@ class WaiterShell extends StatelessWidget {
           ? NavigationBar(
               selectedIndex: _selectedIndex(GoRouterState.of(context).uri.path),
               onDestinationSelected: (index) {
-                switch (index) {
-                  case 0:
-                    context.go('/app/restaurant/waiter');
-                  case 1:
-                    context.go('/app/restaurant/waiter/orders/ORD-015');
-                  case 2:
-                    context.go('/app/pos/shifts/open');
+                if (index == 0) {
+                  context.go('/app/restaurant/waiter');
+                } else {
+                  context.go('/app/restaurant/kitchen-board');
                 }
               },
               destinations: const [
@@ -53,12 +63,8 @@ class WaiterShell extends StatelessWidget {
                   label: 'Mesas',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.receipt_long_outlined),
-                  label: 'Comandas',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.schedule_outlined),
-                  label: 'Mi turno',
+                  icon: Icon(Icons.soup_kitchen_outlined),
+                  label: 'Cocina',
                 ),
               ],
             )
@@ -66,9 +72,6 @@ class WaiterShell extends StatelessWidget {
     );
   }
 
-  int _selectedIndex(String location) {
-    if (location.contains('/orders/')) return 1;
-    if (location.contains('/shifts/')) return 2;
-    return 0;
-  }
+  int _selectedIndex(String location) =>
+      location.contains('/kitchen-board') ? 1 : 0;
 }

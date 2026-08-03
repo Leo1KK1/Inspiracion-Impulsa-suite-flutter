@@ -37,7 +37,14 @@ abstract final class AdminRoleGuard {
 }
 
 abstract final class WaiterRoleGuard {
-  static const roles = ['WAITER', 'MANAGER', 'OWNER'];
+  static const roles = ['WAITER', 'CASHIER', 'MANAGER', 'OWNER'];
+
+  static String? redirect(TenantSessionController session) =>
+      RoleGuard.redirect(session, roles);
+}
+
+abstract final class KitchenRoleGuard {
+  static const roles = ['CHEF', 'WAITER', 'MANAGER', 'OWNER'];
 
   static String? redirect(TenantSessionController session) =>
       RoleGuard.redirect(session, roles);

@@ -6,10 +6,10 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/app_card.dart';
+import '../../../../shared/widgets/app_states.dart';
+import '../../../restaurant_floor/data/models/restaurant_models.dart';
 import '../../data/models/waiter_models.dart';
 import '../controllers/waiter_controller.dart';
-
-enum _SplitMode { equal, products }
 
 class SplitBillPage extends StatefulWidget {
   const SplitBillPage({super.key, required this.tableId});
@@ -21,135 +21,193 @@ class SplitBillPage extends StatefulWidget {
 }
 
 class _SplitBillPageState extends State<SplitBillPage> {
-  _SplitMode _mode = _SplitMode.equal;
+  SplitBillMode _mode = SplitBillMode.equal;
   int _people = 2;
   final Map<String, int> _assignments = {};
-  bool _completed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<WaiterController>().loadTable(widget.tableId);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final waiter = context.watch<WaiterController>();
-    final lines = waiter.order;
-    final total = waiter.total == 0 ? 1960.40 : waiter.total;
-    if (_completed) {
-      return Center(
-        child: AppCard(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.check_circle,
-                  size: 68,
-                  color: AppColors.success,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Cuenta dividida correctamente',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Las partes están listas para continuar con el cobro.',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  onPressed: () => context.go('/app/restaurant/waiter'),
-                  icon: const Icon(Icons.table_restaurant),
-                  label: const Text('Volver a mesas'),
-                ),
-              ],
-            ),
-          ),
-        ),
+    if (waiter.loadingTable && waiter.activeTable == null) {
+      return const AppLoadingState(message: 'Cargando cuenta real…');
+    }
+    final table = waiter.activeTable;
+    if (table == null || table.activeSession == null) {
+      return AppErrorState(
+        message: waiter.errorMessage ?? 'La mesa no tiene una sesión abierta.',
+        onRetry: () => waiter.loadTable(widget.tableId),
       );
     }
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSpacing.xl),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1050),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: () => context.go(
-                      '/app/restaurant/waiter/tables/${widget.tableId}',
+    final items = [
+      for (final order in waiter.tableOrders)
+        if (order.status != KitchenOrderStatus.cancelled)
+          for (final item in order.items)
+            if (item.status != KitchenItemStatus.cancelled)
+              (order: order, item: item),
+    ];
+    final total = items.fold<double>(0, (sum, row) => sum + row.item.lineTotal);
+    return RefreshIndicator(
+      onRefresh: () => waiter.loadTable(widget.tableId),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1050),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Volver a la mesa',
+                      onPressed: () => context.go(
+                        '/app/restaurant/waiter/tables/${widget.tableId}',
+                      ),
+                      icon: const Icon(Icons.arrow_back),
                     ),
-                    icon: const Icon(Icons.arrow_back),
-                  ),
-                  Expanded(
-                    child: Text(
-                      'Dividir cuenta · Mesa ${widget.tableId.split('-').last}',
+                    Expanded(
+                      child: Text(
+                        'Dividir cuenta · ${table.name}',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                    ),
+                    Text(
+                      AppFormatters.currency(total),
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
-                  ),
-                  Text(
-                    AppFormatters.currency(total),
-                    style: Theme.of(context).textTheme.headlineSmall,
+                  ],
+                ),
+                if (waiter.errorMessage != null) ...[
+                  const SizedBox(height: 12),
+                  AppCard(
+                    color: AppColors.destructive.withValues(alpha: 0.08),
+                    child: Text(
+                      waiter.errorMessage!,
+                      style: const TextStyle(color: AppColors.destructive),
+                    ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 18),
-              SegmentedButton<_SplitMode>(
-                segments: const [
-                  ButtonSegment(
-                    value: _SplitMode.equal,
-                    icon: Icon(Icons.groups_outlined),
-                    label: Text('Partes iguales'),
+                const SizedBox(height: 18),
+                SegmentedButton<SplitBillMode>(
+                  segments: const [
+                    ButtonSegment(
+                      value: SplitBillMode.equal,
+                      icon: Icon(Icons.groups_outlined),
+                      label: Text('Partes iguales'),
+                    ),
+                    ButtonSegment(
+                      value: SplitBillMode.byItem,
+                      icon: Icon(Icons.receipt_long_outlined),
+                      label: Text('Por partidas'),
+                    ),
+                  ],
+                  selected: {_mode},
+                  onSelectionChanged: waiter.saving
+                      ? null
+                      : (value) {
+                          setState(() => _mode = value.first);
+                          waiter.clearSplitResult();
+                        },
+                ),
+                const SizedBox(height: 18),
+                if (items.isEmpty)
+                  const OperationalEmptyState(
+                    title: 'Cuenta vacía',
+                    message: 'No hay partidas activas para dividir.',
+                  )
+                else if (_mode == SplitBillMode.equal)
+                  _EqualSplitPanel(
+                    people: _people,
+                    total: total,
+                    onChanged: (value) {
+                      setState(() => _people = value);
+                      waiter.clearSplitResult();
+                    },
+                  )
+                else
+                  _ProductSplitPanel(
+                    items: items,
+                    assignments: _assignments,
+                    onAssigned: (id, part) {
+                      setState(() => _assignments[id] = part);
+                      waiter.clearSplitResult();
+                    },
                   ),
-                  ButtonSegment(
-                    value: _SplitMode.products,
-                    icon: Icon(Icons.receipt_long_outlined),
-                    label: Text('Por productos'),
+                const SizedBox(height: 18),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                    onPressed:
+                        items.isEmpty || waiter.saving || !_canSubmit(items)
+                        ? null
+                        : () => _submit(waiter, items),
+                    icon: waiter.saving
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.calculate_outlined),
+                    label: const Text('Calcular división'),
                   ),
+                ),
+                if (waiter.splitResult case final result?) ...[
+                  const SizedBox(height: 18),
+                  _SplitResultCard(result: result),
                 ],
-                selected: {_mode},
-                onSelectionChanged: (value) =>
-                    setState(() => _mode = value.first),
-              ),
-              const SizedBox(height: 18),
-              if (_mode == _SplitMode.equal)
-                _EqualSplitPanel(
-                  people: _people,
-                  total: total,
-                  onChanged: (value) => setState(() => _people = value),
-                )
-              else
-                _ProductSplitPanel(
-                  lines: lines,
-                  assignments: _assignments,
-                  fallbackTotal: total,
-                  onAssigned: (id, part) =>
-                      setState(() => _assignments[id] = part),
-                ),
-              const SizedBox(height: 18),
-              Align(
-                alignment: Alignment.centerRight,
-                child: ElevatedButton.icon(
-                  onPressed: _canComplete(lines)
-                      ? () => setState(() => _completed = true)
-                      : null,
-                  icon: const Icon(Icons.check),
-                  label: const Text('Confirmar división'),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  bool _canComplete(List<WaiterOrderLine> lines) {
-    if (_mode == _SplitMode.equal) return _people >= 2 && _people <= 12;
-    if (lines.isEmpty) return _assignments.length >= 3;
-    return lines.every((line) => _assignments.containsKey(line.product.id));
+  bool _canSubmit(List<({KitchenOrder order, KitchenOrderItem item})> items) {
+    if (_mode == SplitBillMode.equal) return _people >= 1 && _people <= 30;
+    return items.every((row) => _assignments.containsKey(row.item.id)) &&
+        _assignments.containsValue(0) &&
+        _assignments.containsValue(1);
+  }
+
+  Future<void> _submit(
+    WaiterController waiter,
+    List<({KitchenOrder order, KitchenOrderItem item})> items,
+  ) async {
+    final success = _mode == SplitBillMode.equal
+        ? await waiter.splitEqual(widget.tableId, _people)
+        : await waiter.splitByItem(widget.tableId, [
+            SplitBillAssignment(
+              guestLabel: 'Cuenta A',
+              itemIds: [
+                for (final row in items)
+                  if (_assignments[row.item.id] == 0) row.item.id,
+              ],
+            ),
+            SplitBillAssignment(
+              guestLabel: 'Cuenta B',
+              itemIds: [
+                for (final row in items)
+                  if (_assignments[row.item.id] == 1) row.item.id,
+              ],
+            ),
+          ]);
+    if (success && mounted) {
+      AppSuccessFeedback.show(context, 'División calculada por el backend.');
+    }
   }
 }
 
@@ -177,7 +235,8 @@ class _EqualSplitPanel extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             IconButton.filledTonal(
-              onPressed: people > 2 ? () => onChanged(people - 1) : null,
+              tooltip: 'Reducir partes',
+              onPressed: people > 1 ? () => onChanged(people - 1) : null,
               icon: const Icon(Icons.remove),
             ),
             SizedBox(
@@ -189,33 +248,20 @@ class _EqualSplitPanel extends StatelessWidget {
               ),
             ),
             IconButton.filled(
-              onPressed: people < 12 ? () => onChanged(people + 1) : null,
+              tooltip: 'Aumentar partes',
+              onPressed: people < 30 ? () => onChanged(people + 1) : null,
               icon: const Icon(Icons.add),
             ),
           ],
         ),
         const SizedBox(height: 18),
         Text(
-          AppFormatters.currency(total / people),
-          style: Theme.of(context).textTheme.displaySmall?.copyWith(
-            color: AppColors.tenantAccent,
-            fontWeight: FontWeight.w900,
-          ),
+          'Vista previa: ${AppFormatters.currency(total / people)} por parte',
+          style: Theme.of(context).textTheme.titleLarge,
         ),
-        const Text('por persona, impuestos incluidos'),
-        const SizedBox(height: 18),
-        Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            for (var i = 0; i < people; i++)
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: AppColors.tenantAccent.withValues(alpha: 0.12),
-                child: Text('${i + 1}'),
-              ),
-          ],
+        const SizedBox(height: 6),
+        const Text(
+          'El backend ajustará los centavos restantes en la última parte.',
         ),
       ],
     ),
@@ -224,136 +270,105 @@ class _EqualSplitPanel extends StatelessWidget {
 
 class _ProductSplitPanel extends StatelessWidget {
   const _ProductSplitPanel({
-    required this.lines,
+    required this.items,
     required this.assignments,
-    required this.fallbackTotal,
     required this.onAssigned,
   });
 
-  final List<WaiterOrderLine> lines;
+  final List<({KitchenOrder order, KitchenOrderItem item})> items;
   final Map<String, int> assignments;
-  final double fallbackTotal;
   final void Function(String, int) onAssigned;
 
   @override
   Widget build(BuildContext context) {
-    final displayLines = lines.isEmpty
-        ? const [
-            ('demo-1', 'Filete de res × 2', 690.0),
-            ('demo-2', 'Carpaccio de atún', 195.0),
-            ('demo-3', 'Bebidas y postres', 805.0),
-          ]
-        : [
-            for (final line in lines)
-              (
-                line.product.id,
-                '${line.product.name} × ${line.quantity}',
-                line.product.price * line.quantity,
-              ),
-          ];
-    final unassigned = displayLines
-        .where((line) => !assignments.containsKey(line.$1))
+    final unassigned = items
+        .where((row) => !assignments.containsKey(row.item.id))
         .length;
-    final partA = displayLines
-        .where((line) => assignments[line.$1] == 0)
-        .fold<double>(0, (sum, line) => sum + line.$3);
-    final partB = displayLines
-        .where((line) => assignments[line.$1] == 1)
-        .fold<double>(0, (sum, line) => sum + line.$3);
     return Column(
       children: [
-        if (unassigned > 0)
+        if (unassigned > 0) ...[
           AppCard(
             color: AppColors.warning.withValues(alpha: 0.08),
             child: Row(
               children: [
                 const Icon(Icons.warning_amber, color: AppColors.warning),
                 const SizedBox(width: 10),
-                Text('$unassigned productos aún no tienen cuenta asignada.'),
+                Expanded(
+                  child: Text('$unassigned partidas aún no tienen cuenta.'),
+                ),
               ],
             ),
           ),
-        if (unassigned > 0) const SizedBox(height: 12),
+          const SizedBox(height: 12),
+        ],
         AppCard(
           child: Column(
             children: [
-              for (final line in displayLines)
+              for (final row in items)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: Text(line.$2),
-                  subtitle: Text(AppFormatters.currency(line.$3)),
+                  title: Text('${row.item.quantity} × ${row.item.productName}'),
+                  subtitle: Text(
+                    '${row.order.folio} · '
+                    '${AppFormatters.currency(row.item.lineTotal)}',
+                  ),
                   trailing: SegmentedButton<int>(
                     segments: const [
                       ButtonSegment(value: 0, label: Text('A')),
                       ButtonSegment(value: 1, label: Text('B')),
                     ],
                     emptySelectionAllowed: true,
-                    selected: assignments.containsKey(line.$1)
-                        ? {assignments[line.$1]!}
+                    selected: assignments.containsKey(row.item.id)
+                        ? {assignments[row.item.id]!}
                         : const {},
                     onSelectionChanged: (value) {
-                      if (value.isNotEmpty) onAssigned(line.$1, value.first);
+                      if (value.isNotEmpty) {
+                        onAssigned(row.item.id, value.first);
+                      }
                     },
                   ),
                 ),
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _BillPart(
-                label: 'Cuenta A',
-                subtotal: partA,
-                fallback: fallbackTotal / 2,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _BillPart(
-                label: 'Cuenta B',
-                subtotal: partB,
-                fallback: fallbackTotal / 2,
-              ),
-            ),
-          ],
-        ),
       ],
     );
   }
 }
 
-class _BillPart extends StatelessWidget {
-  const _BillPart({
-    required this.label,
-    required this.subtotal,
-    required this.fallback,
-  });
+class _SplitResultCard extends StatelessWidget {
+  const _SplitResultCard({required this.result});
 
-  final String label;
-  final double subtotal;
-  final double fallback;
+  final SplitBillResult result;
 
   @override
-  Widget build(BuildContext context) {
-    final base = subtotal == 0 ? fallback / 1.16 : subtotal;
-    final tax = base * 0.16;
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 10),
-          Text('Subtotal: ${AppFormatters.currency(base)}'),
-          Text('IVA 16%: ${AppFormatters.currency(tax)}'),
-          const Divider(),
+  Widget build(BuildContext context) => AppCard(
+    color: AppColors.success.withValues(alpha: 0.06),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.check_circle, color: AppColors.success),
+            const SizedBox(width: 8),
+            Text(
+              'Resultado del backend',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text('Total: ${AppFormatters.currency(result.grandTotal)}'),
+        for (final part in result.parts)
+          Text('Parte ${part.part}: ${AppFormatters.currency(part.amount)}'),
+        for (final group in result.groups)
+          Text('${group.guestLabel}: ${AppFormatters.currency(group.amount)}'),
+        if (result.unassignedItems.isNotEmpty)
           Text(
-            'Total: ${AppFormatters.currency(base + tax)}',
-            style: const TextStyle(fontWeight: FontWeight.w900),
+            '${result.unassignedItems.length} partidas quedaron sin asignar.',
+            style: const TextStyle(color: AppColors.warning),
           ),
-        ],
-      ),
-    );
-  }
+      ],
+    ),
+  );
 }

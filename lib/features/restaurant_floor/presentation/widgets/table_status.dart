@@ -7,25 +7,44 @@ import '../../data/models/restaurant_models.dart';
 Color tableStatusColor(RestaurantTableStatus status) => switch (status) {
   RestaurantTableStatus.available => AppColors.success,
   RestaurantTableStatus.occupied => AppColors.tenantAccent,
-  RestaurantTableStatus.waitingOrder => const Color(0xFFD97706),
-  RestaurantTableStatus.inPreparation => const Color(0xFFEA580C),
-  RestaurantTableStatus.readyToBill => const Color(0xFF9333EA),
-  RestaurantTableStatus.dirty => AppColors.mutedForeground,
   RestaurantTableStatus.reserved => const Color(0xFF4F46E5),
+  RestaurantTableStatus.dirty => AppColors.mutedForeground,
 };
 
 String tableStatusLabel(RestaurantTableStatus status) => switch (status) {
   RestaurantTableStatus.available => 'Disponible',
   RestaurantTableStatus.occupied => 'Ocupada',
-  RestaurantTableStatus.waitingOrder => 'Esperando orden',
-  RestaurantTableStatus.inPreparation => 'En preparación',
-  RestaurantTableStatus.readyToBill => 'Lista para cobrar',
-  RestaurantTableStatus.dirty => 'Sucia',
   RestaurantTableStatus.reserved => 'Reservada',
+  RestaurantTableStatus.dirty => 'Por limpiar',
+};
+
+String kitchenOrderStatusLabel(KitchenOrderStatus status) => switch (status) {
+  KitchenOrderStatus.pending => 'Pendiente',
+  KitchenOrderStatus.inPreparation => 'En preparación',
+  KitchenOrderStatus.ready => 'Lista',
+  KitchenOrderStatus.delivered => 'Entregada',
+  KitchenOrderStatus.cancelled => 'Cancelada',
+};
+
+Color kitchenOrderStatusColor(KitchenOrderStatus status) => switch (status) {
+  KitchenOrderStatus.pending => AppColors.primary,
+  KitchenOrderStatus.inPreparation => AppColors.warning,
+  KitchenOrderStatus.ready => AppColors.success,
+  KitchenOrderStatus.delivered => AppColors.mutedForeground,
+  KitchenOrderStatus.cancelled => AppColors.destructive,
+};
+
+String kitchenItemStatusLabel(KitchenItemStatus status) => switch (status) {
+  KitchenItemStatus.pending => 'Pendiente',
+  KitchenItemStatus.inPreparation => 'Preparando',
+  KitchenItemStatus.ready => 'Listo',
+  KitchenItemStatus.delivered => 'Entregado',
+  KitchenItemStatus.cancelled => 'Cancelado',
 };
 
 class TableStatusBadge extends StatelessWidget {
   const TableStatusBadge({super.key, required this.status});
+
   final RestaurantTableStatus status;
 
   @override
@@ -35,9 +54,14 @@ class TableStatusBadge extends StatelessWidget {
   );
 }
 
-String zoneLabel(RestaurantZone zone) => switch (zone) {
-  RestaurantZone.salon => 'Salón',
-  RestaurantZone.terraza => 'Terraza',
-  RestaurantZone.barra => 'Barra',
-  RestaurantZone.privado => 'Privado',
-};
+class KitchenOrderStatusBadge extends StatelessWidget {
+  const KitchenOrderStatusBadge({super.key, required this.status});
+
+  final KitchenOrderStatus status;
+
+  @override
+  Widget build(BuildContext context) => AppBadge(
+    label: kitchenOrderStatusLabel(status),
+    color: kitchenOrderStatusColor(status),
+  );
+}

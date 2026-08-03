@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -17,161 +19,231 @@ class KitchenBoardPage extends StatefulWidget {
   State<KitchenBoardPage> createState() => _KitchenBoardPageState();
 }
 
-class _KitchenBoardPageState extends State<KitchenBoardPage> {
-  RestaurantZone? _zone;
+class _KitchenBoardPageState extends State<KitchenBoardPage>
+    with WidgetsBindingObserver {
+  Timer? _poller;
+  bool _visible = true;
 
   @override
   void initState() {
     super.initState();
-    final controller = context.read<RestaurantController>();
-    if (controller.kitchenOrders.isEmpty) controller.load();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final controller = context.read<RestaurantController>();
+      controller.loadKitchenOrders().whenComplete(() {
+        if (mounted) _startPolling();
+      });
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _visible = state == AppLifecycleState.resumed;
+    if (_visible) {
+      _startPolling();
+      context.read<RestaurantController>().loadKitchenOrders(force: true);
+    } else {
+      _poller?.cancel();
+    }
+  }
+
+  void _startPolling() {
+    _poller?.cancel();
+    _poller = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (!_visible || !mounted) return;
+      final controller = context.read<RestaurantController>();
+      if (!controller.loadingKitchen && !controller.saving) {
+        controller.loadKitchenOrders(force: true);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _poller?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final restaurant = context.watch<RestaurantController>();
-    if (restaurant.loading) {
-      return const AppLoadingState(message: 'Cargando comandas…');
+    if (restaurant.loadingKitchen && restaurant.kitchenOrders.isEmpty) {
+      return const AppLoadingState(message: 'Cargando comandas reales…');
     }
-    final orders = restaurant.kitchenOrders
-        .where((order) => _zone == null || order.zone == _zone)
-        .toList();
+    if (restaurant.errorMessage != null && restaurant.kitchenOrders.isEmpty) {
+      return AppErrorState(
+        message: restaurant.errorMessage!,
+        onRetry: () => restaurant.loadKitchenOrders(force: true),
+      );
+    }
+    final orders = restaurant.kitchenOrders;
     final urgent = orders.where((order) => order.urgent).length;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSpacing.xl),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          PageHeader(
-            title: 'Tablero de cocina',
-            subtitle: 'Comandas por etapa y actualización en vivo.',
-            actions: [
-              SizedBox(
-                width: 180,
-                child: DropdownButtonFormField<RestaurantZone?>(
-                  initialValue: _zone,
-                  decoration: const InputDecoration(labelText: 'Zona'),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('Todas')),
-                    for (final zone in RestaurantZone.values)
-                      DropdownMenuItem(
-                        value: zone,
-                        child: Text(zoneLabel(zone)),
+    final statuses = restaurant.kitchenStatusFilter == null
+        ? const [
+            KitchenOrderStatus.pending,
+            KitchenOrderStatus.inPreparation,
+            KitchenOrderStatus.ready,
+          ]
+        : [restaurant.kitchenStatusFilter!];
+    return RefreshIndicator(
+      onRefresh: () => restaurant.loadKitchenOrders(force: true),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            PageHeader(
+              title: 'Tablero de cocina',
+              subtitle:
+                  'Estados por platillo. Actualización automática cada 20 segundos mientras la app está activa.',
+              actions: [
+                SizedBox(
+                  width: 210,
+                  child: DropdownButtonFormField<KitchenOrderStatus?>(
+                    initialValue: restaurant.kitchenStatusFilter,
+                    decoration: const InputDecoration(labelText: 'Estado'),
+                    items: [
+                      const DropdownMenuItem(
+                        value: null,
+                        child: Text('Activas'),
                       ),
-                  ],
-                  onChanged: (value) => setState(() => _zone = value),
-                ),
-              ),
-            ],
-          ),
-          if (urgent > 0) ...[
-            const SizedBox(height: 14),
-            Card(
-              color: AppColors.destructive.withValues(alpha: 0.08),
-              child: ListTile(
-                leading: const Icon(
-                  Icons.warning_amber,
-                  color: AppColors.destructive,
-                ),
-                title: Text('$urgent comandas superan 20 minutos'),
-                subtitle: const Text('Prioriza su preparación y entrega.'),
-              ),
-            ),
-          ],
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              for (final status in KitchenOrderStatus.values)
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: MetricCard(
-                      label: _statusLabel(status),
-                      value:
-                          '${orders.where((order) => order.status == status).length}',
-                      icon: _statusIcon(status),
-                      color: _statusColor(status),
-                    ),
+                      for (final status in KitchenOrderStatus.values)
+                        DropdownMenuItem(
+                          value: status,
+                          child: Text(kitchenOrderStatusLabel(status)),
+                        ),
+                    ],
+                    onChanged: restaurant.saving
+                        ? null
+                        : restaurant.setKitchenStatus,
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            height: 620,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                for (final status in KitchenOrderStatus.values)
-                  SizedBox(
-                    width: 310,
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: _KitchenColumn(
-                        status: status,
-                        orders: orders
-                            .where((order) => order.status == status)
-                            .toList(),
-                        onAdvance: restaurant.advanceKitchenOrder,
-                      ),
-                    ),
-                  ),
+                IconButton.outlined(
+                  tooltip: 'Actualizar comandas',
+                  onPressed: restaurant.loadingKitchen
+                      ? null
+                      : () => restaurant.loadKitchenOrders(force: true),
+                  icon: const Icon(Icons.refresh),
+                ),
               ],
             ),
-          ),
-        ],
+            if (restaurant.errorMessage != null) ...[
+              const SizedBox(height: 12),
+              Card(
+                child: ListTile(
+                  tileColor: AppColors.destructive.withValues(alpha: 0.08),
+                  leading: const Icon(
+                    Icons.error_outline,
+                    color: AppColors.destructive,
+                  ),
+                  title: Text(restaurant.errorMessage!),
+                ),
+              ),
+            ],
+            if (urgent > 0) ...[
+              const SizedBox(height: 14),
+              Card(
+                child: ListTile(
+                  tileColor: AppColors.destructive.withValues(alpha: 0.08),
+                  leading: const Icon(
+                    Icons.warning_amber,
+                    color: AppColors.destructive,
+                  ),
+                  title: Text('$urgent comandas superan 20 minutos'),
+                  subtitle: const Text(
+                    'La antigüedad se calcula desde createdAt del backend.',
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
+            if (orders.isEmpty)
+              OperationalEmptyState(
+                title: 'Sin comandas',
+                message: restaurant.kitchenStatusFilter == null
+                    ? 'No hay comandas activas en cocina.'
+                    : 'No hay comandas con el estado seleccionado.',
+                actionLabel: 'Actualizar',
+                onAction: () => restaurant.loadKitchenOrders(force: true),
+              )
+            else
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth < 720) {
+                    return Column(
+                      children: [
+                        for (final status in statuses)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: SizedBox(
+                              height: 520,
+                              child: _KitchenColumn(
+                                status: status,
+                                orders: orders
+                                    .where((order) => order.status == status)
+                                    .toList(growable: false),
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  }
+                  return SizedBox(
+                    height: 650,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        for (final status in statuses)
+                          SizedBox(
+                            width: 340,
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 12),
+                              child: _KitchenColumn(
+                                status: status,
+                                orders: orders
+                                    .where((order) => order.status == status)
+                                    .toList(growable: false),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
       ),
     );
   }
-
-  static String _statusLabel(KitchenOrderStatus status) => switch (status) {
-    KitchenOrderStatus.newOrder => 'Nuevas',
-    KitchenOrderStatus.inPreparation => 'En preparación',
-    KitchenOrderStatus.ready => 'Listas',
-    KitchenOrderStatus.delivered => 'Entregadas',
-  };
-
-  static IconData _statusIcon(KitchenOrderStatus status) => switch (status) {
-    KitchenOrderStatus.newOrder => Icons.notifications_active_outlined,
-    KitchenOrderStatus.inPreparation => Icons.soup_kitchen_outlined,
-    KitchenOrderStatus.ready => Icons.check_circle_outline,
-    KitchenOrderStatus.delivered => Icons.delivery_dining_outlined,
-  };
-
-  static Color _statusColor(KitchenOrderStatus status) => switch (status) {
-    KitchenOrderStatus.newOrder => AppColors.primary,
-    KitchenOrderStatus.inPreparation => AppColors.warning,
-    KitchenOrderStatus.ready => AppColors.success,
-    KitchenOrderStatus.delivered => AppColors.mutedForeground,
-  };
 }
 
 class _KitchenColumn extends StatelessWidget {
-  const _KitchenColumn({
-    required this.status,
-    required this.orders,
-    required this.onAdvance,
-  });
+  const _KitchenColumn({required this.status, required this.orders});
+
   final KitchenOrderStatus status;
   final List<KitchenOrder> orders;
-  final ValueChanged<String> onAdvance;
 
   @override
   Widget build(BuildContext context) => Card(
-    color: _KitchenBoardPageState._statusColor(status).withValues(alpha: 0.04),
+    color: kitchenOrderStatusColor(status).withValues(alpha: 0.04),
     child: Padding(
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
           Row(
             children: [
-              Icon(_KitchenBoardPageState._statusIcon(status)),
+              Icon(_statusIcon(status), color: kitchenOrderStatusColor(status)),
               const SizedBox(width: 7),
-              Text(
-                _KitchenBoardPageState._statusLabel(status),
-                style: const TextStyle(fontWeight: FontWeight.w800),
+              Expanded(
+                child: Text(
+                  kitchenOrderStatusLabel(status),
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
               ),
-              const Spacer(),
               AppBadge(label: '${orders.length}'),
             ],
           ),
@@ -181,93 +253,171 @@ class _KitchenColumn extends StatelessWidget {
                 ? const Center(child: Text('Sin comandas'))
                 : ListView.builder(
                     itemCount: orders.length,
-                    itemBuilder: (context, index) => _KitchenOrderCard(
-                      order: orders[index],
-                      onAdvance: onAdvance,
-                    ),
+                    itemBuilder: (context, index) =>
+                        _KitchenOrderCard(order: orders[index]),
                   ),
           ),
         ],
       ),
     ),
   );
+
+  IconData _statusIcon(KitchenOrderStatus status) => switch (status) {
+    KitchenOrderStatus.pending => Icons.notifications_active_outlined,
+    KitchenOrderStatus.inPreparation => Icons.soup_kitchen_outlined,
+    KitchenOrderStatus.ready => Icons.check_circle_outline,
+    KitchenOrderStatus.delivered => Icons.delivery_dining_outlined,
+    KitchenOrderStatus.cancelled => Icons.cancel_outlined,
+  };
 }
 
 class _KitchenOrderCard extends StatelessWidget {
-  const _KitchenOrderCard({required this.order, required this.onAdvance});
+  const _KitchenOrderCard({required this.order});
+
   final KitchenOrder order;
-  final ValueChanged<String> onAdvance;
 
   @override
-  Widget build(BuildContext context) => Card(
-    margin: const EdgeInsets.only(bottom: 10),
-    child: Padding(
-      padding: const EdgeInsets.all(13),
+  Widget build(BuildContext context) {
+    final controller = context.watch<RestaurantController>();
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(13),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    order.folio,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                AppBadge(
+                  label: '${order.elapsedMinutes} MIN',
+                  color: order.urgent
+                      ? AppColors.destructive
+                      : AppColors.tenantAccent,
+                ),
+              ],
+            ),
+            Text(order.tableLabel),
+            if (order.waiterUser != null)
+              Text(
+                order.waiterUser!.fullName,
+                style: const TextStyle(
+                  color: AppColors.mutedForeground,
+                  fontSize: 12,
+                ),
+              ),
+            if (order.notes?.isNotEmpty == true)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'Nota: ${order.notes}',
+                  style: const TextStyle(color: AppColors.warning),
+                ),
+              ),
+            const Divider(),
+            for (final item in order.items)
+              _KitchenItemRow(
+                order: order,
+                item: item,
+                disabled: controller.saving,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KitchenItemRow extends StatelessWidget {
+  const _KitchenItemRow({
+    required this.order,
+    required this.item,
+    required this.disabled,
+  });
+
+  final KitchenOrder order;
+  final KitchenOrderItem item;
+  final bool disabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final next = _nextStatus(item.status);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                order.id,
-                style: const TextStyle(fontWeight: FontWeight.w900),
-              ),
-              const Spacer(),
-              AppBadge(
-                label: '${order.sentMinutesAgo} MIN',
-                color: order.urgent
-                    ? AppColors.destructive
-                    : AppColors.tenantAccent,
-              ),
-            ],
-          ),
-          Text('Mesa ${order.tableNumber} · ${zoneLabel(order.zone)}'),
           Text(
-            order.waiterName,
-            style: const TextStyle(
-              color: AppColors.mutedForeground,
-              fontSize: 11,
+            '${item.quantity}× ${item.productName}',
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          Text(
+            kitchenItemStatusLabel(item.status),
+            style: TextStyle(
+              color: kitchenOrderStatusColor(
+                KitchenOrderStatus.fromApi(item.status.apiValue),
+              ),
+              fontSize: 12,
             ),
           ),
-          const Divider(),
-          for (final item in order.items)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 7),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${item.quantity}× ${item.name}',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  if (item.notes != null)
-                    Text(
-                      item.notes!,
-                      style: const TextStyle(
-                        color: AppColors.warning,
-                        fontSize: 12,
-                      ),
-                    ),
-                ],
-              ),
+          if (item.notes?.isNotEmpty == true)
+            Text(
+              item.notes!,
+              style: const TextStyle(color: AppColors.warning, fontSize: 12),
             ),
-          if (order.status != KitchenOrderStatus.delivered)
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: () => onAdvance(order.id),
-                child: Text(_action(order.status)),
-              ),
+          if (next != null) ...[
+            const SizedBox(height: 7),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: disabled
+                      ? null
+                      : () => context
+                            .read<RestaurantController>()
+                            .updateKitchenItemStatus(order, item, next),
+                  icon: const Icon(Icons.arrow_forward, size: 17),
+                  label: Text(_actionLabel(next)),
+                ),
+                TextButton.icon(
+                  onPressed: disabled
+                      ? null
+                      : () => context
+                            .read<RestaurantController>()
+                            .updateKitchenItemStatus(
+                              order,
+                              item,
+                              KitchenItemStatus.cancelled,
+                            ),
+                  icon: const Icon(Icons.cancel_outlined, size: 17),
+                  label: const Text('Cancelar'),
+                ),
+              ],
             ),
+          ],
         ],
       ),
-    ),
-  );
+    );
+  }
 
-  String _action(KitchenOrderStatus status) => switch (status) {
-    KitchenOrderStatus.newOrder => 'Iniciar',
-    KitchenOrderStatus.inPreparation => 'Listo',
-    KitchenOrderStatus.ready => 'Entregar',
-    KitchenOrderStatus.delivered => 'Entregada',
+  KitchenItemStatus? _nextStatus(KitchenItemStatus status) => switch (status) {
+    KitchenItemStatus.pending => KitchenItemStatus.inPreparation,
+    KitchenItemStatus.inPreparation => KitchenItemStatus.ready,
+    KitchenItemStatus.ready => KitchenItemStatus.delivered,
+    KitchenItemStatus.delivered || KitchenItemStatus.cancelled => null,
+  };
+
+  String _actionLabel(KitchenItemStatus status) => switch (status) {
+    KitchenItemStatus.inPreparation => 'Preparar',
+    KitchenItemStatus.ready => 'Marcar listo',
+    KitchenItemStatus.delivered => 'Entregar',
+    _ => 'Actualizar',
   };
 }

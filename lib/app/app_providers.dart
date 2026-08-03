@@ -5,12 +5,10 @@ import '../features/finance/presentation/controllers/finance_controller.dart';
 import '../features/inventory/presentation/controllers/inventory_controller.dart';
 import '../features/pos/presentation/controllers/pos_controller.dart';
 import '../features/purchasing/presentation/controllers/purchasing_controller.dart';
-import '../features/restaurant_floor/data/repositories/restaurant_repository.dart';
 import '../features/restaurant_floor/presentation/controllers/restaurant_controller.dart';
 import '../features/session/presentation/controllers/tenant_session_controller.dart';
 import '../features/superadmin/presentation/controllers/superadmin_controller.dart';
 import '../features/tenant_admin/presentation/controllers/tenant_admin_controller.dart';
-import '../features/waiter/data/repositories/waiter_repository.dart';
 import '../features/waiter/presentation/controllers/waiter_controller.dart';
 
 class AppProviders extends StatefulWidget {
@@ -22,6 +20,8 @@ class AppProviders extends StatefulWidget {
     required this.purchasingController,
     required this.posController,
     required this.financeController,
+    required this.restaurantController,
+    required this.waiterController,
     required this.superadminController,
     required this.child,
   });
@@ -32,6 +32,8 @@ class AppProviders extends StatefulWidget {
   final PurchasingController purchasingController;
   final PosController posController;
   final FinanceController financeController;
+  final RestaurantController restaurantController;
+  final WaiterController waiterController;
   final SuperadminController superadminController;
   final Widget child;
 
@@ -40,15 +42,11 @@ class AppProviders extends StatefulWidget {
 }
 
 class _AppProvidersState extends State<AppProviders> {
-  late final RestaurantController restaurant;
-  late final WaiterController waiter;
   String? _observedBranchId;
 
   @override
   void initState() {
     super.initState();
-    restaurant = RestaurantController(MockRestaurantRepository());
-    waiter = WaiterController(MockWaiterRepository());
     _observedBranchId = widget.sessionController.activeBranchId;
     widget.sessionController.addListener(_syncSession);
   }
@@ -59,6 +57,22 @@ class _AppProvidersState extends State<AppProviders> {
       isOwner: widget.sessionController.isOwner,
       branchId: branchId,
     );
+    widget.restaurantController.updateSession(
+      branchId: branchId,
+      canUseFloor: widget.sessionController.hasAnyRole(const [
+        'OWNER',
+        'MANAGER',
+        'WAITER',
+        'CASHIER',
+      ]),
+      canUseKitchen: widget.sessionController.hasAnyRole(const [
+        'OWNER',
+        'MANAGER',
+        'WAITER',
+        'CHEF',
+      ]),
+    );
+    widget.waiterController.updateBranch(branchId);
     if (branchId == _observedBranchId) return;
     _observedBranchId = branchId;
     widget.tenantAdminController.invalidate();
@@ -85,15 +99,20 @@ class _AppProvidersState extends State<AppProviders> {
     if (widget.sessionController.hasAnyRole(const ['OWNER', 'MANAGER'])) {
       widget.financeController.load(force: true);
     }
-    restaurant.load(branchId: branchId);
-    waiter.load(branchId: branchId);
+    widget.restaurantController.load(force: true);
+    if (widget.sessionController.hasAnyRole(const [
+      'OWNER',
+      'MANAGER',
+      'WAITER',
+      'CASHIER',
+    ])) {
+      widget.waiterController.loadMenu(force: true);
+    }
   }
 
   @override
   void dispose() {
     widget.sessionController.removeListener(_syncSession);
-    restaurant.dispose();
-    waiter.dispose();
     super.dispose();
   }
 
@@ -106,8 +125,8 @@ class _AppProvidersState extends State<AppProviders> {
       ChangeNotifierProvider.value(value: widget.purchasingController),
       ChangeNotifierProvider.value(value: widget.posController),
       ChangeNotifierProvider.value(value: widget.financeController),
-      ChangeNotifierProvider.value(value: restaurant),
-      ChangeNotifierProvider.value(value: waiter),
+      ChangeNotifierProvider.value(value: widget.restaurantController),
+      ChangeNotifierProvider.value(value: widget.waiterController),
       ChangeNotifierProvider.value(value: widget.superadminController),
     ],
     child: widget.child,

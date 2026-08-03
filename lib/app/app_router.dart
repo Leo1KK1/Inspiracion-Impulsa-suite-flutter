@@ -123,15 +123,22 @@ String? _redirect(
     final branchRedirect = BranchContextGuard.redirect(session);
     if (branchRedirect != null) return branchRedirect;
   }
+  if (location.startsWith('/app/restaurant/waiter/orders/')) {
+    return KitchenRoleGuard.redirect(session);
+  }
   if (location.startsWith('/app/restaurant/waiter')) {
+    return WaiterRoleGuard.redirect(session);
+  }
+  if (location.startsWith('/app/restaurant/kitchen-board')) {
+    return KitchenRoleGuard.redirect(session);
+  }
+  if (location.startsWith('/app/restaurant/floor')) {
     return WaiterRoleGuard.redirect(session);
   }
   if (location.startsWith('/app/pos')) {
     return PosRoleGuard.redirect(session);
   }
-  if (location.startsWith('/app/admin') ||
-      location.startsWith('/app/restaurant/floor') ||
-      location.startsWith('/app/restaurant/kitchen-board')) {
+  if (location.startsWith('/app/admin')) {
     return AdminRoleGuard.redirect(session);
   }
   return null;
