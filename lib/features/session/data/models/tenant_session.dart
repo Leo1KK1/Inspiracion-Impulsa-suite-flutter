@@ -52,6 +52,7 @@ class TenantSession {
     required this.refreshToken,
     required this.userName,
     required this.userEmail,
+    this.modules = const [],
   });
 
   final String authContext;
@@ -70,6 +71,7 @@ class TenantSession {
   final String refreshToken;
   final String userName;
   final String userEmail;
+  final List<String> modules;
 
   String? get activeBranchName {
     for (final branch in branches) {
@@ -91,6 +93,7 @@ class TenantSession {
     String? tenantName,
     String? tenantSlug,
     String? tenantStatus,
+    List<String>? modules,
   }) {
     return TenantSession(
       authContext: authContext,
@@ -109,6 +112,7 @@ class TenantSession {
       refreshToken: refreshToken ?? this.refreshToken,
       userName: userName ?? this.userName,
       userEmail: userEmail ?? this.userEmail,
+      modules: modules ?? this.modules,
     );
   }
 
@@ -129,6 +133,7 @@ class TenantSession {
     'refreshToken': refreshToken,
     'userName': userName,
     'userEmail': userEmail,
+    'modules': modules,
   };
 
   factory TenantSession.fromJson(Map<String, Object?> json) {
@@ -155,6 +160,7 @@ class TenantSession {
       refreshToken: json['refreshToken']! as String,
       userName: json['userName']! as String,
       userEmail: json['userEmail']! as String,
+      modules: (json['modules'] as List? ?? const []).whereType<String>().toList(growable: false),
     );
   }
 }

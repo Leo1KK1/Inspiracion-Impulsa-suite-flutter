@@ -25,6 +25,7 @@ class TenantSessionController extends ChangeNotifier {
   String? get activeBranchId => _session?.activeBranchId;
   List<String> get roleCodes => _session?.roleCodes ?? const [];
   List<String> get permissions => _session?.permissions ?? const [];
+  List<String> get modules => _session?.modules ?? const [];
   List<TenantBranchAccess> get branches => _session?.branches ?? const [];
   bool get isOwner => roleCodes.contains('OWNER');
   bool get isManager => roleCodes.contains('MANAGER');
@@ -102,6 +103,7 @@ class TenantSessionController extends ChangeNotifier {
   }
 
   bool hasAnyRole(Iterable<String> allowed) => roleCodes.any(allowed.contains);
+  bool hasModule(String module) => modules.contains(module);
 
   Future<void> logout() async {
     try {

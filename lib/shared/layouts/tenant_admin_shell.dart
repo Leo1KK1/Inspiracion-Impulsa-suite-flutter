@@ -168,6 +168,10 @@ class _TenantNavigation extends StatelessWidget {
       ),
       _NavItem('/app/restaurant/waiter', 'Módulo mesero', Icons.room_service),
     ]),
+    _NavGroup('Retail', [
+      _NavItem('/app/retail/floor', 'Probadores', Icons.checkroom_outlined),
+      _NavItem('/app/retail/drafts', 'Cobros pendientes', Icons.receipt_long_outlined),
+    ]),
     _NavGroup('Analítica', [
       _NavItem(
         '/app/admin/analytics/dashboard',

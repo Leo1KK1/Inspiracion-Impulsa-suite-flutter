@@ -6,6 +6,7 @@ import '../features/inventory/presentation/controllers/inventory_controller.dart
 import '../features/pos/presentation/controllers/pos_controller.dart';
 import '../features/purchasing/presentation/controllers/purchasing_controller.dart';
 import '../features/restaurant_floor/presentation/controllers/restaurant_controller.dart';
+import '../features/retail/presentation/controllers/retail_controller.dart';
 import '../features/session/presentation/controllers/tenant_session_controller.dart';
 import '../features/superadmin/presentation/controllers/superadmin_controller.dart';
 import '../features/tenant_admin/presentation/controllers/tenant_admin_controller.dart';
@@ -24,6 +25,7 @@ class ImpulsaSuiteApp extends StatefulWidget {
     required this.financeController,
     required this.restaurantController,
     required this.waiterController,
+    required this.retailController,
     required this.superadminController,
   });
 
@@ -35,6 +37,7 @@ class ImpulsaSuiteApp extends StatefulWidget {
   final FinanceController financeController;
   final RestaurantController restaurantController;
   final WaiterController waiterController;
+  final RetailController retailController;
   final SuperadminController superadminController;
 
   @override
@@ -63,6 +66,7 @@ class _ImpulsaSuiteAppState extends State<ImpulsaSuiteApp> {
     financeController: widget.financeController,
     restaurantController: widget.restaurantController,
     waiterController: widget.waiterController,
+    retailController: widget.retailController,
     superadminController: widget.superadminController,
     child: MaterialApp.router(
       title: 'Impulsa Suite',

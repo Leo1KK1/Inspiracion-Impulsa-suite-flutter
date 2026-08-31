@@ -56,3 +56,15 @@ abstract final class PosRoleGuard {
   static String? redirect(TenantSessionController session) =>
       RoleGuard.redirect(session, roles);
 }
+
+abstract final class RetailFloorRoleGuard {
+  static const roles = ['OWNER', 'MANAGER', 'SELLER'];
+  static String? redirect(TenantSessionController session) =>
+      !session.hasModule('RETAIL') ? '/app/access-denied' : RoleGuard.redirect(session, roles);
+}
+
+abstract final class RetailDraftRoleGuard {
+  static const roles = ['OWNER', 'MANAGER', 'CASHIER'];
+  static String? redirect(TenantSessionController session) =>
+      !session.hasModule('RETAIL') ? '/app/access-denied' : RoleGuard.redirect(session, roles);
+}

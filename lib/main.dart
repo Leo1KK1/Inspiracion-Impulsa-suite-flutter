@@ -14,6 +14,8 @@ import 'features/purchasing/data/repositories/purchasing_repository.dart';
 import 'features/purchasing/presentation/controllers/purchasing_controller.dart';
 import 'features/restaurant_floor/data/repositories/restaurant_repository.dart';
 import 'features/restaurant_floor/presentation/controllers/restaurant_controller.dart';
+import 'features/retail/data/repositories/retail_repository.dart';
+import 'features/retail/presentation/controllers/retail_controller.dart';
 import 'features/session/data/repositories/session_repository.dart';
 import 'features/session/presentation/controllers/tenant_session_controller.dart';
 import 'features/superadmin/data/repositories/superadmin_repository.dart';
@@ -73,6 +75,12 @@ Future<void> main() async {
     restaurantRepository,
     initialBranchId: session.activeBranchId,
   );
+  final retail = RetailController(
+    HttpRetailRepository(tenantClient),
+    initialBranchId: session.activeBranchId,
+    canManageFittingRooms: session.hasModule('RETAIL') && session.hasAnyRole(const ['OWNER', 'MANAGER', 'SELLER']),
+    canManageDrafts: session.hasModule('RETAIL') && session.hasAnyRole(const ['OWNER', 'MANAGER', 'CASHIER']),
+  );
   final superadmin = SuperadminController(
     HttpSuperadminRepository(
       DioClient(baseUrl: AppConfig.apiBaseUrl),
@@ -90,6 +98,7 @@ Future<void> main() async {
       financeController: finance,
       restaurantController: restaurant,
       waiterController: waiter,
+      retailController: retail,
       superadminController: superadmin,
     ),
   );

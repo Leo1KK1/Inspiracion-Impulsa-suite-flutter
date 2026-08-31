@@ -24,6 +24,9 @@ import '../features/purchasing/presentation/pages/suppliers_page.dart';
 import '../features/restaurant_floor/presentation/pages/kitchen_board_page.dart';
 import '../features/restaurant_floor/presentation/pages/restaurant_floor_page.dart';
 import '../features/restaurant_floor/presentation/pages/table_detail_page.dart';
+import '../features/retail/presentation/pages/fitting_room_detail_page.dart';
+import '../features/retail/presentation/pages/retail_drafts_page.dart';
+import '../features/retail/presentation/pages/retail_floor_page.dart';
 import '../features/session/presentation/controllers/tenant_session_controller.dart';
 import '../features/superadmin/presentation/pages/superadmin_pages.dart';
 import '../features/superadmin/presentation/controllers/superadmin_controller.dart';
@@ -118,7 +121,8 @@ String? _redirect(
       location.startsWith('/app/admin/purchasing') ||
       location.startsWith('/app/admin/analytics') ||
       location.startsWith('/app/admin/finance') ||
-      location.startsWith('/app/restaurant');
+      location.startsWith('/app/restaurant') ||
+      location.startsWith('/app/retail');
   if (requiresBranch) {
     final branchRedirect = BranchContextGuard.redirect(session);
     if (branchRedirect != null) return branchRedirect;
@@ -138,6 +142,8 @@ String? _redirect(
   if (location.startsWith('/app/pos')) {
     return PosRoleGuard.redirect(session);
   }
+  if (location.startsWith('/app/retail/drafts')) return RetailDraftRoleGuard.redirect(session);
+  if (location.startsWith('/app/retail')) return RetailFloorRoleGuard.redirect(session);
   if (location.startsWith('/app/admin')) {
     return AdminRoleGuard.redirect(session);
   }
@@ -315,6 +321,9 @@ ShellRoute _tenantAdminRoutes() => ShellRoute(
       path: '/app/restaurant/kitchen-board',
       builder: (_, _) => const KitchenBoardPage(),
     ),
+    GoRoute(path: '/app/retail/floor', builder: (_, _) => const RetailFloorPage()),
+    GoRoute(path: '/app/retail/floor/:roomId', builder: (_, state) => FittingRoomDetailPage(roomId: state.pathParameters['roomId']!)),
+    GoRoute(path: '/app/retail/drafts', builder: (_, _) => const RetailDraftsPage()),
     _referenceRoute('/app/orders', 'Pedidos'),
     _referenceRoute('/app/reports', 'Reportes'),
     _referenceRoute('/app/settings', 'Configuración · Tenant'),

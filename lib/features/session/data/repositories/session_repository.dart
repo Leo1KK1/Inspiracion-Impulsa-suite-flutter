@@ -143,6 +143,7 @@ class HttpTenantSessionRepository implements SessionRepository {
       accessToken: data['accessToken'] as String?,
       refreshToken: data['refreshToken'] as String?,
       permissions: _strings(data['permissions']),
+      modules: _strings(data['modules']),
     );
     await _setCurrent(updated);
     return updated;
@@ -212,6 +213,7 @@ class HttpTenantSessionRepository implements SessionRepository {
           sessionId: sessionData['sessionId'] as String?,
           accessToken: data['accessToken'] as String?,
           refreshToken: data['refreshToken'] as String?,
+          modules: _strings(data['modules']),
         ),
       );
       return true;
@@ -242,6 +244,7 @@ class HttpTenantSessionRepository implements SessionRepository {
       refreshToken: data['refreshToken']! as String,
       userName: user['fullName']! as String,
       userEmail: user['email']! as String,
+      modules: _strings(data['modules']),
     );
   }
 
@@ -258,6 +261,7 @@ class HttpTenantSessionRepository implements SessionRepository {
       tenantName: tenant['name'] as String?,
       tenantSlug: tenant['slug'] as String?,
       tenantStatus: tenant['status'] as String?,
+      modules: _strings(data['modules']),
     );
   }
 

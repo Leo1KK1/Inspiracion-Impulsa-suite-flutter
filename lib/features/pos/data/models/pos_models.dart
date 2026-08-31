@@ -462,6 +462,8 @@ class CreatePosSaleRequest {
     required this.paymentMethod,
     this.cashReceived,
     this.notes,
+    this.retailDraftId,
+    this.consumeReservedStock,
   });
 
   final String cashShiftId;
@@ -469,6 +471,8 @@ class CreatePosSaleRequest {
   final PaymentMethod paymentMethod;
   final double? cashReceived;
   final String? notes;
+  final String? retailDraftId;
+  final bool? consumeReservedStock;
 
   Map<String, Object?> toJson() => {
     'cashShiftId': cashShiftId,
@@ -476,6 +480,8 @@ class CreatePosSaleRequest {
     'paymentMethod': paymentMethod.apiValue,
     if (cashReceived != null) 'cashReceived': cashReceived,
     if (notes?.trim().isNotEmpty == true) 'notes': notes!.trim(),
+    if (retailDraftId != null) 'retailDraftId': retailDraftId,
+    if (consumeReservedStock != null) 'consumeReservedStock': consumeReservedStock,
   };
 }
 

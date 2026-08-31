@@ -44,6 +44,7 @@ class PosController extends ChangeNotifier {
   PosSale? lastSale;
   PosSale? pendingSale;
   CardPaymentIntent? pendingIntent;
+  String? activeRetailDraftId;
   String query = '';
   String category = 'Todos';
   bool searchingProducts = false;
@@ -141,6 +142,7 @@ class PosController extends ChangeNotifier {
     lastSale = null;
     pendingSale = null;
     pendingIntent = null;
+    activeRetailDraftId = null;
     query = '';
     category = 'Todos';
     searchingProducts = false;
@@ -373,6 +375,8 @@ class PosController extends ChangeNotifier {
           paymentMethod: method,
           cashReceived: method == PaymentMethod.card ? null : cashReceived,
           notes: notes,
+          retailDraftId: activeRetailDraftId,
+          consumeReservedStock: activeRetailDraftId != null ? true : null,
         ),
       );
       lastSale = sale;
@@ -381,6 +385,7 @@ class PosController extends ChangeNotifier {
 
       if (method == PaymentMethod.cash) {
         cart = const [];
+        activeRetailDraftId = null;
         checkoutPhase = CheckoutPhase.success;
         await _refreshOperationalData();
         notifyListeners();
@@ -480,6 +485,7 @@ class PosController extends ChangeNotifier {
       pendingSale = null;
       pendingIntent = null;
       cart = const [];
+      activeRetailDraftId = null;
       checkoutPhase = CheckoutPhase.success;
       lastSale = confirmedSale;
       try {
@@ -518,6 +524,19 @@ class PosController extends ChangeNotifier {
 
   void clearSelectedTicket() {
     selectedTicket = null;
+    notifyListeners();
+  }
+
+  /// Replaces the current cart with the server-priced items of a retail draft.
+  /// The draft id travels with the POS sale so stock reservations are consumed
+  /// atomically by the backend.
+  void loadRetailDraft(String draftId, List<CartLine> lines) {
+    if (checkoutBusy || hasPendingPayment || draftId.isEmpty || lines.isEmpty) {
+      return;
+    }
+    activeRetailDraftId = draftId;
+    cart = List<CartLine>.unmodifiable(lines);
+    errorMessage = null;
     notifyListeners();
   }
 

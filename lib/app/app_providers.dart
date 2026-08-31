@@ -6,6 +6,7 @@ import '../features/inventory/presentation/controllers/inventory_controller.dart
 import '../features/pos/presentation/controllers/pos_controller.dart';
 import '../features/purchasing/presentation/controllers/purchasing_controller.dart';
 import '../features/restaurant_floor/presentation/controllers/restaurant_controller.dart';
+import '../features/retail/presentation/controllers/retail_controller.dart';
 import '../features/session/presentation/controllers/tenant_session_controller.dart';
 import '../features/superadmin/presentation/controllers/superadmin_controller.dart';
 import '../features/tenant_admin/presentation/controllers/tenant_admin_controller.dart';
@@ -22,6 +23,7 @@ class AppProviders extends StatefulWidget {
     required this.financeController,
     required this.restaurantController,
     required this.waiterController,
+    required this.retailController,
     required this.superadminController,
     required this.child,
   });
@@ -34,6 +36,7 @@ class AppProviders extends StatefulWidget {
   final FinanceController financeController;
   final RestaurantController restaurantController;
   final WaiterController waiterController;
+  final RetailController retailController;
   final SuperadminController superadminController;
   final Widget child;
 
@@ -73,6 +76,11 @@ class _AppProvidersState extends State<AppProviders> {
       ]),
     );
     widget.waiterController.updateBranch(branchId);
+    widget.retailController.updateSession(
+      branchId: branchId,
+      canManageRooms: widget.sessionController.hasModule('RETAIL') && widget.sessionController.hasAnyRole(const ['OWNER', 'MANAGER', 'SELLER']),
+      canManageDrafts: widget.sessionController.hasModule('RETAIL') && widget.sessionController.hasAnyRole(const ['OWNER', 'MANAGER', 'CASHIER']),
+    );
     if (branchId == _observedBranchId) return;
     _observedBranchId = branchId;
     widget.tenantAdminController.invalidate();
@@ -100,6 +108,7 @@ class _AppProvidersState extends State<AppProviders> {
       widget.financeController.load(force: true);
     }
     widget.restaurantController.load(force: true);
+    widget.retailController.load(force: true);
     if (widget.sessionController.hasAnyRole(const [
       'OWNER',
       'MANAGER',
@@ -127,6 +136,7 @@ class _AppProvidersState extends State<AppProviders> {
       ChangeNotifierProvider.value(value: widget.financeController),
       ChangeNotifierProvider.value(value: widget.restaurantController),
       ChangeNotifierProvider.value(value: widget.waiterController),
+      ChangeNotifierProvider.value(value: widget.retailController),
       ChangeNotifierProvider.value(value: widget.superadminController),
     ],
     child: widget.child,
